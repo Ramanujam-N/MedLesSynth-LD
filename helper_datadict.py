@@ -108,7 +108,7 @@ def helper_supervised(system_data_path,which_data='brats',size=(128,128,128),siz
 
         datadict_train = ImageLoader3D(liver_indexes['train_names_flair'],liver_indexes['train_names_seg'],type_of_imgs='nifty',transform = composed_transform,data='liver')
         datadict_val = ImageLoader3D(liver_indexes['val_names_flair'],liver_indexes['val_names_seg'],type_of_imgs='nifty', transform = ToTensor3D(True),data='liver')
-        datadict_test = ImageLoader3D(liver_indexes['test_names_flair'],liver_indexes['test_names_seg'],type_of_imgs='nifty', transform = ToTensor3D(True),data='liver')
+        datadict_test = ImageLoader3D(liver_indexes['test_names_flair'],liver_indexes['test_names_seg'],type_of_imgs='nifty', transform = ToTensor3D(True),data='liver',no_crop=no_crop,return_size=True,return_orig=True)
 
 
     elif(which_data=='busi'):
@@ -116,9 +116,9 @@ def helper_supervised(system_data_path,which_data='brats',size=(128,128,128),siz
         busi_indexes = np.load('./Data_splits/Train_val_test_42_6_x/busi_indexes.npy', allow_pickle=True).item()
         busi_indexes = helper_path_configuration(busi_indexes,system_data_path)
 
-        datadict_train = ImageLoader2D(busi_indexes['train_names_flair'],busi_indexes['train_names_seg'],image_size=512,type_of_imgs='png',transform = composed_transform_2d,data='busi')
-        datadict_val = ImageLoader2D(busi_indexes['val_names_flair'],busi_indexes['val_names_seg'],image_size=512,type_of_imgs='png', transform = ToTensor2D(True),data='busi')
-        datadict_test = ImageLoader2D(busi_indexes['test_names_flair'],busi_indexes['test_names_seg'],image_size=512,type_of_imgs='png', transform = ToTensor2D(True),data='busi',return_size=True,return_orig=True)
+        datadict_train = ImageLoader2D(busi_indexes['train_names_flair'],busi_indexes['train_names_seg'],image_size=size,type_of_imgs='png',transform = composed_transform_2d,data='busi')
+        datadict_val = ImageLoader2D(busi_indexes['val_names_flair'],busi_indexes['val_names_seg'],image_size=size,type_of_imgs='png', transform = ToTensor2D(True),data='busi')
+        datadict_test = ImageLoader2D(busi_indexes['test_names_flair'],busi_indexes['test_names_seg'],image_size=size,type_of_imgs='png', transform = ToTensor2D(True),data='busi',return_size=True,return_orig=True)
 
     elif(which_data=='idrid'):
         # Brain Tumor Segmentation Challenge
@@ -131,6 +131,78 @@ def helper_supervised(system_data_path,which_data='brats',size=(128,128,128),siz
     
     print(len(datadict_train),len(datadict_val),len(datadict_test))
     return datadict_train,datadict_val,datadict_test
+
+def helper_pre_training(which_data='brats',scale_factor=1.0,sim_path_other=None,size=(128,128,128),no_crop=False):
+    sim_path = sim_path_other
+    print('Using simulation path:{} for data {}'.format(sim_path_other,which_data))
+
+
+    if(which_data=='wmh'):
+        # WMH
+
+        train_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*FLAIR.nii.gz'))) 
+        train_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*manualmask.nii.gz')))
+
+        val_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*FLAIR.nii.gz')))
+        val_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*manualmask.nii.gz')))
+
+        datadict_train = ImageLoader3D(train_names_flair,train_names_seg,type_of_imgs='nifty',image_size=size, transform = composed_transform,no_crop=no_crop)   
+        datadict_val = ImageLoader3D(val_names_flair,val_names_seg,type_of_imgs='nifty',image_size=size, transform = ToTensor3D(True),no_crop=no_crop)  
+        print(len(train_names_flair),len(train_names_seg))
+
+    elif(which_data=='brats'):
+        # BraTS
+
+        train_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*FLAIR.nii.gz'))) 
+        train_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*manualmask.nii.gz')))
+
+        val_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*FLAIR.nii.gz')))
+        val_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*manualmask.nii.gz')))
+
+        datadict_train = ImageLoader3D(train_names_flair,train_names_seg,type_of_imgs='nifty', image_size=size, transform = composed_transform,no_crop=no_crop)   
+        datadict_val = ImageLoader3D(val_names_flair,val_names_seg,type_of_imgs='nifty', image_size=size, transform = ToTensor3D(True),no_crop=no_crop)  
+
+    elif(which_data=='lits'):
+        # BraTS
+
+        train_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*FLAIR.nii.gz')))
+        train_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*manualmask.nii.gz')))
+
+        val_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*FLAIR.nii.gz')))
+        val_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*manualmask.nii.gz')))
+
+        datadict_train = ImageLoader3D(train_names_flair,train_names_seg,type_of_imgs='nifty', image_size=size, transform = composed_transform,no_crop=no_crop)   
+        datadict_val = ImageLoader3D(val_names_flair,val_names_seg,type_of_imgs='nifty', image_size=size, transform = ToTensor3D(True),no_crop=no_crop)  
+
+    elif(which_data=='total3d'):
+        # BraTS
+        train_names_flair = []
+        train_names_seg = []
+        val_names_flair = []
+        val_names_seg = []
+        for which_data in ['bratsonsim','wmhonsim','litsonsim']:
+            train_names_flair += sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*FLAIR.nii.gz'))) 
+            train_names_seg += sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*manualmask.nii.gz')))
+
+            val_names_flair += sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*FLAIR.nii.gz')))
+            val_names_seg += sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*manualmask.nii.gz')))
+        
+        datadict_train = ImageLoader3D(train_names_flair,train_names_seg,type_of_imgs='nifty', image_size=size, transform = composed_transform,no_crop=no_crop)   
+        datadict_val = ImageLoader3D(val_names_flair,val_names_seg,type_of_imgs='nifty', image_size=size, transform = ToTensor3D(True),no_crop=no_crop)  
+
+    elif(which_data=='busi'):
+
+        train_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*image.png')))
+        train_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*mask.png')))
+
+        val_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*image.png')))
+        val_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*mask.png')))
+        
+        datadict_train = ImageLoader2D(train_names_flair,train_names_seg,image_size=(512,512),type_of_imgs='png',transform = composed_transform_2d,data='busi')
+        datadict_val = ImageLoader2D(val_names_flair,val_names_seg,image_size=(512,512),type_of_imgs='png', transform = ToTensor2D(True),data='busi')
+
+    return datadict_train,datadict_val
+
 
 def helper_self_supervised(which_data='brats',scale_factor=1.0,sim_path_other=None,size=(128,128,128),no_crop=False):
     sim_path = sim_path_other
@@ -199,6 +271,8 @@ def helper_self_supervised(which_data='brats',scale_factor=1.0,sim_path_other=No
 
     return datadict_train,datadict_val
 
+
+
 def helper_data_augmentation(system_data_path,which_data='brats',factor=1.0,scale_factor=1.0,sim_path_other=None,size=(128,128,128),no_crop=False):
     sim_path = sim_path_other
     print('Using simulation path:{} for data {}'.format(sim_path_other,which_data))
@@ -251,7 +325,6 @@ def helper_data_augmentation(system_data_path,which_data='brats',factor=1.0,scal
 
         real_datadict_train = ImageLoader2D(busi_indexes['train_names_flair'],busi_indexes['train_names_seg'],image_size=(512,512),type_of_imgs='nifty',transform = composed_transform_2d,data='busi')
         real_datadict_val = ImageLoader2D(busi_indexes['val_names_flair'],busi_indexes['val_names_seg'],image_size=(512,512),type_of_imgs='nifty', transform = ToTensor2D(True),data='busi')
-
     elif(which_data=='idrid'):
         idrid_indexes = np.load('./Data_splits/Train_val_test_42_6_x/idrid_indexes.npy', allow_pickle=True).item()
         idrid_indexes = helper_path_configuration(idrid_indexes,system_data_path)
@@ -265,7 +338,6 @@ def helper_data_augmentation(system_data_path,which_data='brats',factor=1.0,scal
 
     if(which_data=='wmh'):
         # WMH
-
         train_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*FLAIR.nii.gz')))[:train_size] 
         train_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*manualmask.nii.gz')))[:train_size]
 
@@ -283,7 +355,6 @@ def helper_data_augmentation(system_data_path,which_data='brats',factor=1.0,scal
 
         val_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*FLAIR.nii.gz')))[:val_size]
         val_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*manualmask.nii.gz')))[:val_size]
-
 
         datadict_train = ImageLoader3D(train_names_flair,train_names_seg,type_of_imgs='nifty',image_size=size,no_crop=no_crop, transform = composed_transform)   
         datadict_val = ImageLoader3D(val_names_flair,val_names_seg,type_of_imgs='nifty',image_size=size,no_crop=no_crop, transform = ToTensor3D(True))  
@@ -515,7 +586,7 @@ def helper_model(model_type,which_data,hyper_parameters,device=0,size=(128,128,1
             "hidden_dropout_prob": 0.0,
             "attention_probs_dropout_prob": 0.0,
             "initializer_range": 0.02,
-            "image_size": 128,
+            "image_size": (128,128,128),
             "num_classes": 1, # num_classes of binary
             "num_channels": 1,
             "qkv_bias": True,
@@ -528,7 +599,7 @@ def helper_model(model_type,which_data,hyper_parameters,device=0,size=(128,128,1
             model = VITForSegmentation(config=config).to(device)
             
     elif(model_type == 'slimunetr'):
-        if(which_data=='busi'):
+        if(which_data=='busi' or which_data=='idrid'):
             model = SlimUNETR2D(in_channels=1, out_channels=1,**hyper_parameters).to(device)
         else:
             model = SlimUNETR(in_channels=1, out_channels=1,**hyper_parameters).to(device)

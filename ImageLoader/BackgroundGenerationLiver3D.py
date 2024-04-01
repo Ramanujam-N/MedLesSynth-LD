@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from scipy import ndimage
 
-class BackgroundGeneration3D(Dataset):
+class BackgroundGenerationLiver3D(Dataset):
     def __init__(self, type_of_imgs='nifty',have_texture=True,have_noise=True, have_smoothing=True, have_small=True, have_edema=True, return_param=True, transform=None, dark=True, which_data='wmh',perturb=False, size=(128,128,128),semi_axis_range=[(5,10)],centroid_scale=10,num_lesions=5,range_sampling=[1],num_ellipses=15):
 
         self.transform = transform
@@ -78,8 +78,8 @@ class BackgroundGeneration3D(Dataset):
         
     def gaussian_noise(self, sigma=1.0,size=None, range_min=-0.3, range_max=1.0):
         noise = np.random.random(self.size)
-        # gaussian_noise = gaussian_filter(noise,sigma) + 0.5*gaussian_filter(noise,sigma/2) + 0.25*gaussian_filter(noise,sigma/4) #+ 0.125*gaussian_filter(noise,sigma/8) + 0.0625*gaussian_filter(noise,sigma/16)
-        gaussian_noise = 1 + 0.1*gaussian_filter(noise,sigma) # 0.4 - 0.6 MR Background
+        gaussian_noise = gaussian_filter(noise,sigma) + 0.5*gaussian_filter(noise,sigma/2) + 0.25*gaussian_filter(noise,sigma/4) #+ 0.125*gaussian_filter(noise,sigma/8) + 0.0625*gaussian_filter(noise,sigma/16)
+        # gaussian_noise = 1 + 0.1*gaussian_filter(noise,sigma) # 0.4 - 0.6 MR Background
  
         # noise = np.random.random(self.size)
         # gaussian_noise2 = gaussian_filter(noise,sigma) #+ 0.5*gaussian_filter(noise,sigma/4) + 0.25*gaussian_filter(noise,sigma/8) + 0.125*gaussian_filter(noise,sigma/16)
@@ -114,9 +114,15 @@ class BackgroundGeneration3D(Dataset):
         # 1. Select the length of the major axis length 
         # 2. Others just need to be a random ratio over the major axis length
         random_major_axes = np.random.randint(semi_axes_range[0],semi_axes_range[1],(num_ellipses,1))
-        random_minor_axes = np.concatenate([np.ones((num_ellipses,1)),np.random.uniform(0.5,0.6,size = (num_ellipses,1)),np.random.uniform(0.1,1,size = (num_ellipses,1))],1) #0.1 to 0.8
+        val1 = np.random.uniform(0.4,0.5,size = (num_ellipses,1))
+        val2 = np.random.uniform(0.5,0.6,size = (num_ellipses,1))
+        random_minor_axes2 = np.concatenate([val1,0.9*np.ones((num_ellipses,1)),val2],1) #0.1 to 0.8
+        random_minor_axes1 = np.concatenate([0.7*np.ones((num_ellipses,1)),val1,val2],1) #0.1 to 0.8
+
         random_minor_axes_ven = np.concatenate([np.ones((num_ellipses,1)),np.random.uniform(0.4,0.6,size = (num_ellipses,1)),np.random.uniform(0.8,1,size = (num_ellipses,1))],1) #0.1 to 0.8
-        random_semi_axes = random_major_axes*random_minor_axes
+
+        random_semi_axes1 = random_major_axes*random_minor_axes1
+        random_semi_axes2 = random_major_axes*random_minor_axes2
         random_semi_axes_ven = random_major_axes//3*random_minor_axes_ven
 
         # Permuting the axes so that one axes doesn't end up being the major every time.
@@ -126,9 +132,17 @@ class BackgroundGeneration3D(Dataset):
         
         # Random rotation angles for the ellipsoids
         # random_rot_angles = np.random.uniform(size = (num_ellipses,3))*np.pi
-        random_rot_angles = np.ones(shape = (num_ellipses,3))*np.pi
+        random_rot_angles1= np.zeros(shape = (num_ellipses,3))
+        random_rot_angles2 = np.zeros(shape = (num_ellipses,3))
+       
+        random_rot_angles2[:,2] +=np.pi/6
+        # random_rot_angles2[:,2] *=np.pi
+        # random_rot_angles1[:,1] *=(-np.pi/2)
 
+        # random_rot_angles2[:,1] *=np.pi
+        # random_rot_angles2[:,2] *=np.pi
 
+#  -------------- make vessels too ----------------
         x,y,z = np.mgrid[0:self.size[0], 0:self.size[1],0:self.size[2]]
         x = np.ones_like(x)*self.size[0]
         n= gaussian_filter(np.random.random(self.size[0]),sigma =8) +0.5*gaussian_filter(np.random.random(self.size),sigma =4) +0.25*gaussian_filter(np.random.random(self.size),sigma =2)
@@ -138,30 +152,30 @@ class BackgroundGeneration3D(Dataset):
         folds -=folds.min()
         folds /=folds.max()+1e-7
         folds = np.logical_and(folds>0.5,folds<0.6)
+        folds = ndimage.binary_opening(folds)
 
-        out_wmh = []
-        for i in range(num_ellipses):
-            out_wmh.append(self.ellipsoid(random_centroids1[i],*random_semi_axes[i]//1.5,*random_rot_angles[i],img_dim=self.size) )
+        # out_wmh = []
+        # for i in range(num_ellipses):
+        #     out_wmh.append(self.ellipsoid(random_centroids1[i],*random_semi_axes[i]//1.5,*random_rot_angles[i],img_dim=self.size) )
         
-        out_wmh2 = []
-        for i in range(num_ellipses):
-            out_wmh2.append(self.ellipsoid(random_centroids2[i],*random_semi_axes[i]//1.5,*random_rot_angles[i],img_dim=self.size) )
+        # out_wmh2 = []
+        # for i in range(num_ellipses):
+        #     out_wmh2.append(self.ellipsoid(random_centroids2[i],*random_semi_axes[i]//1.5,*random_rot_angles[i],img_dim=self.size) )
 
-        out_wmh = np.logical_or.reduce(out_wmh)*image_mask
-        out_wmh2 = np.logical_or.reduce(out_wmh2)*image_mask
-        out_wmh = np.logical_or(out_wmh,out_wmh2) 
+        # out_wmh = np.logical_or.reduce(out_wmh)*image_mask
+        # out_wmh2 = np.logical_or.reduce(out_wmh2)*image_mask
+        # out_wmh = np.logical_or(out_wmh,out_wmh2) 
 
-        folds = np.logical_or((1-folds)*(1-out_wmh),out_wmh)
-
+        # folds = np.logical_or((1-folds)*(1-out_wmh),out_wmh)
         # mask below wale folds ke intensity bada de
 
         out_strip = []
         for i in range(num_ellipses):
-            out_strip.append(self.ellipsoid(random_centroids1[i],*random_semi_axes[i]//1.1,*random_rot_angles[i],img_dim=self.size) )
+            out_strip.append(self.ellipsoid(random_centroids1[i],*random_semi_axes1[i]//1.1,*random_rot_angles1[i],img_dim=self.size) )
         
         out_strip2 = []
         for i in range(num_ellipses):
-            out_strip2.append(self.ellipsoid(random_centroids2[i],*random_semi_axes[i]//1.1,*random_rot_angles[i],img_dim=self.size) )
+            out_strip2.append(self.ellipsoid(random_centroids2[i],*random_semi_axes2[i]//1.1,*random_rot_angles2[i],img_dim=self.size) )
 
         out_strip = np.logical_or.reduce(out_strip)*image_mask
         out_strip2 = np.logical_or.reduce(out_strip2)*image_mask
@@ -169,25 +183,25 @@ class BackgroundGeneration3D(Dataset):
 
         out = []
         for i in range(num_ellipses):
-            out.append(self.ellipsoid(random_centroids1[i],*random_semi_axes[i],*random_rot_angles[i],img_dim=self.size) )
+            out.append(self.ellipsoid(random_centroids1[i],*random_semi_axes1[i],*random_rot_angles1[i],img_dim=self.size) )
         
         out2 = []
         for i in range(num_ellipses):
-            out2.append(self.ellipsoid(random_centroids2[i],*random_semi_axes[i],*random_rot_angles[i],img_dim=self.size) )
+            out2.append(self.ellipsoid(random_centroids2[i],*random_semi_axes2[i],*random_rot_angles2[i],img_dim=self.size) )
 
         out = np.logical_or.reduce(out)*image_mask
         out2 = np.logical_or.reduce(out2)*image_mask
         out = np.logical_or(out,out2) 
 
-        ventricles1 = self.ellipsoid(random_centroids1[i]+[-8,8,0],*random_semi_axes_ven[i],*random_rot_angles[i]+[0,0,-np.pi*0.9],img_dim=self.size) 
-        ventricles2 = self.ellipsoid(random_centroids2[i]+[-8,-8,0],*random_semi_axes_ven[i],*random_rot_angles[i]+[0,0,+np.pi*0.9],img_dim=self.size) 
+        ventricles1 = self.ellipsoid(random_centroids1[i]+[-8,8,0],*random_semi_axes_ven[i],*random_rot_angles1[i]+[0,0,-np.pi*0.9],img_dim=self.size) 
+        ventricles2 = self.ellipsoid(random_centroids2[i]+[-8,-8,0],*random_semi_axes_ven[i],*random_rot_angles1[i]+[0,0,+np.pi*0.9],img_dim=self.size) 
 
-        ventricles3 = self.ellipsoid(random_centroids1[i]+[8,8,0],*random_semi_axes_ven[i],*random_rot_angles[i]+[0,0,+np.pi*0.9],img_dim=self.size) 
-        ventricles4 = self.ellipsoid(random_centroids2[i]+[8,-8,0],*random_semi_axes_ven[i],*random_rot_angles[i]+[0,0,-np.pi*0.9],img_dim=self.size) 
+        ventricles3 = self.ellipsoid(random_centroids1[i]+[8,8,0],*random_semi_axes_ven[i],*random_rot_angles2[i]+[0,0,+np.pi*0.9],img_dim=self.size) 
+        ventricles4 = self.ellipsoid(random_centroids2[i]+[8,-8,0],*random_semi_axes_ven[i],*random_rot_angles2[i]+[0,0,-np.pi*0.9],img_dim=self.size) 
         
-        out = out*(1-ventricles1)*(1-ventricles2)*(1-ventricles3)*(1-ventricles4)
+        out = out#*(1-ventricles1)*(1-ventricles2)*(1-ventricles3)*(1-ventricles4)
         ventricles = 1- (1-ventricles1)*(1-ventricles2)*(1-ventricles3)*(1-ventricles4)
-        folds = (1-folds)*out
+        folds = (1-(1-folds)*out)*out
         out_whole = out
         #out = out*folds
         regions = skimage.measure.regionprops(np.int16(out*2))
@@ -217,7 +231,7 @@ class BackgroundGeneration3D(Dataset):
         # x_corr,y_corr,z_corr = np.nonzero(roi_with_masks[:,:,:])
         # random_coord_index = np.random.choice(len(x_corr),1)
         # centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index],z_corr[random_coord_index]])
-        centroid_main = (np.array([64,52,64]),np.array([64,76,64]))
+        centroid_main = (np.array([64,64,64]),np.array([80,48,64]))
         # print(centroid_main,roi_with_masks[centroid_main[0],centroid_main[1],centroid_main[2]])
         # We need a loop and random choices tailored here for multiple lesions 
 
@@ -238,7 +252,7 @@ class BackgroundGeneration3D(Dataset):
         smoothing_image = np.random.uniform(0.3,0.5)
 
         # tex_sigma = np.random.uniform(0.6,0.8)  # old 1-4
-        tex_sigma = np.random.uniform(0.4,0.6)  # MRI 0.4-0.6
+        tex_sigma = np.random.uniform(1,2)  # MRI 0.4-0.6
 
         range_min = 0 #np.random.uniform(-0.5,0.5)
         range_max = 1 #np.random.uniform(0.7,1)
@@ -246,7 +260,7 @@ class BackgroundGeneration3D(Dataset):
 
         #print(alpha,beta)
         if(semi_axes_range == (2,5)):
-            small_sigma = np.random.uniform(1,2)
+            small_sigma = np.random.uniform(2,3)
             out = self.gaussian_small_shapes(image_mask,small_sigma)
         else:   
             out,out_2,out_strip,ventricles,folds,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask) 
@@ -254,7 +268,7 @@ class BackgroundGeneration3D(Dataset):
                 print(shape_status)
                 # random_coord_index = np.random.choice(len(x_corr),1)
                 # centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index],z_corr[random_coord_index]])
-                centroid_main = (np.array([64,52,64]),np.array([64,76,64]))
+                centroid_main = (np.array([64,32,64]),np.array([32,64,64]))
                 out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
         
         output_mask = np.logical_or(output_mask,out)
@@ -264,7 +278,7 @@ class BackgroundGeneration3D(Dataset):
         else:
             tex_noise = 1.0
         
-        output_image = out*tex_noise - 0.2*out_strip*out*self.gaussian_noise(tex_sigma,self.size,range_min,range_max) + 0.3*ventricles*self.gaussian_noise(tex_sigma,self.size,range_min,range_max) -40*folds
+        output_image = out*tex_noise*(1-folds) + 150*folds#- 0.2*out_strip*out*self.gaussian_noise(tex_sigma,self.size,range_min,range_max)
         output_image -=output_image.min()
         output_image /=output_image.max()
 

@@ -32,39 +32,6 @@ class BackgroundGeneration2D(Dataset):
         self.centroid_scaling = centroid_scale
         self.range_sampling = range_sampling
         self.num_ellipses = num_ellipses
-    def gaussian_small_shapes(self,image_mask,small_sigma = [1,1]):
-
-        image_mask = skimage.morphology.binary_erosion(image_mask,skimage.morphology.square(5))
-        index = -1
-        while(index==-1):
-            noise = np.random.normal(size = self.size)
-            smoothed_noise = gaussian_filter(noise,sigma=small_sigma) + gaussian_filter(noise,sigma=[4,4,4]) + gaussian_filter(noise,sigma=[3,3,3]) + gaussian_filter(noise,sigma=[2,2,2]) + 0.1*gaussian_filter(noise,sigma=[1,1,1])
-            smoothed_noise -= smoothed_noise.min()
-            smoothed_noise /= smoothed_noise.max()
-
-            bg_mask = (smoothed_noise>0.3)*(image_mask)
-            mask = (1-bg_mask)*(image_mask)
-
-            labelled = skimage.measure.label(mask*2,background = 0)         
-            regions = skimage.measure.regionprops(labelled)
-
-            total_brain_area = np.sum(image_mask)
-            count = 0
-            old_area = 0 
-
-            for region in regions:
-                if(region.area<total_brain_area*0.01 and region.area>total_brain_area*(0.0001)):
-                    if(region.area >old_area):
-                        old_area = region.area
-                        index = count
-                count+=1
-
-            if(index!=-1):
-                label = regions[index].label
-
-                label_sim = labelled == label
-
-                return label_sim
         
     def ellipsoid(self,coord=(1,2),semi_a = 4, semi_b = 34, alpha=np.pi/4, beta=np.pi/4,img_dim=(128,128)):
         x = np.linspace(-img_dim[0]//2,np.ceil(img_dim[0]//2),img_dim[0])

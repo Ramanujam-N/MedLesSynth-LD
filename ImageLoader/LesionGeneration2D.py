@@ -14,8 +14,9 @@ def normalize(image):
     return image
 
 class LesionGeneration2D(Dataset):
-    def __init__(self, img_path,type_of_imgs='png',have_texture=True,have_noise=True, have_smoothing=True, have_small=True, have_edema=True, return_param=True, transform=None, dark=True, which_data='wmh',perturb=False, size=(128,128),semi_axis_range=[(5,10)],centroid_scale=10,num_lesions=5,range_sampling=[1],num_ellipses=15):
+    def __init__(self, img_path, gt_path=None,type_of_imgs='png',have_texture=True,have_noise=True, have_smoothing=True, have_small=True, have_edema=True, return_param=True, transform=None, dark=True, which_data='wmh',perturb=False, size=(128,128),semi_axis_range=[(5,10)],centroid_scale=10,num_lesions=5,range_sampling=[1],num_ellipses=15):
         self.paths = img_path
+        self.gt_path = gt_path
         self.transform = transform
         self.size = size
         self.have_texture = have_texture
@@ -175,14 +176,14 @@ class LesionGeneration2D(Dataset):
         
         return final_region,1
 
-    def simulation(self,image,inter_image,image_mask,num_lesions=3):
+    def simulation(self,image,inter_image,image_mask,num_lesions=3,gt_mask=None):
         param_dict = {}
         
         roi = image_mask
 
-        roi_with_masks = roi
+        roi_with_masks = roi*(1-gt_mask)
         output_image = image 
-        output_mask = np.zeros_like(image_mask)
+        output_mask = gt_mask
         
         total_param_list = ['scale_centroid','num_ellipses','semi_axes_range','alpha','beta','gamma','smoothing_mask',
                             'tex_sigma','range_min','range_max','tex_sigma_edema','pertub_sigma']
@@ -334,27 +335,32 @@ class LesionGeneration2D(Dataset):
         image = skimage.io.imread(self.paths[index],as_gray=True)
         image = skiform.resize(image, self.size, order=1, preserve_range=True)
         image = normalize(image)
-        return image
+        if(self.gt_path!=None):
+            gt_img = skimage.io.imread(self.gt_path[index],as_gray=True)
+            gt_mask = skiform.resize(gt_img, self.size, order=0, preserve_range=True)
+            gt_mask = gt_mask>0
+        else:
+            gt_mask = np.zeros_like(image)
+        return image,gt_mask
     def __getitem__(self, index):
 
-        image = self.read_image(index)
+        image,gt_mask = self.read_image(index)
 
         #If texture exists have a interpolation image.
         interpolation_choice = np.random.choice(len(self.paths))
-        inter_image = self.read_image(interpolation_choice)
+        inter_image,_ = self.read_image(interpolation_choice)
 
         if(self.which_data == 'busi'):
             _mask_img = np.ones(image.shape)
-        elif(self.which_data == 'stare'):
-            _mask_img = image>0.1
+
 
         param_dict = {}
 
         if(self.return_param):
-            image, label, param_dict = self.simulation(image,inter_image, _mask_img,self.num_lesions)
+            image, label, param_dict = self.simulation(image,inter_image, _mask_img,self.num_lesions,gt_mask=gt_mask)
 
         else:
-            image, label = self.simulation(image,inter_image, _mask_img,self.num_lesions)
+            image, label = self.simulation(image,inter_image, _mask_img,self.num_lesions,gt_mask=gt_mask)
 
         return image.astype(np.single),label.astype(np.single),self.paths[index],param_dict
 

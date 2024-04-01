@@ -10,8 +10,9 @@ import matplotlib.animation as animation
 from scipy import ndimage
 
 class LesionGeneration3D(Dataset):
-    def __init__(self, img_path, mask_path = None, type_of_imgs='nifty',have_texture=True,have_noise=True, have_smoothing=True, have_small=True, have_edema=True, return_param=True, transform=None, dark=True, which_data='wmh',perturb=False, size=(128,128),semi_axis_range=[(5,10)],centroid_scale=10,num_lesions=5,range_sampling=[1],num_ellipses=15):
+    def __init__(self, img_path, gt_path=None, mask_path = None, type_of_imgs='nifty',have_texture=True,have_noise=True, have_smoothing=True, have_small=True, have_edema=True, return_param=True, transform=None, dark=True, which_data='wmh',perturb=False, size=(128,128,128),semi_axis_range=[(5,10)],centroid_scale=10,num_lesions=5,range_sampling=[1],num_ellipses=15):
         self.paths = img_path
+        self.gt_path = gt_path
         self.mask_path = mask_path
         self.transform = transform
         self.size = size
@@ -179,13 +180,13 @@ class LesionGeneration3D(Dataset):
         
         return final_region,1
 
-    def simulation(self,image,inter_image,image_mask,num_lesions=3):
+    def simulation(self,image,inter_image,image_mask,num_lesions=3,gt_mask=None):
         param_dict = {}
         
-        roi = skimage.morphology.binary_erosion(image_mask,skimage.morphology.ball(15))*(image>0.1)
-        roi_with_masks = roi
-        output_image = image 
-        output_mask = np.zeros_like(image_mask)
+        roi = skimage.morphology.binary_erosion(image_mask,skimage.morphology.ball(10))*(image>0.1) #15
+        roi_with_masks = roi*(1-gt_mask)
+        output_image = image
+        output_mask = gt_mask
         
         total_param_list = ['scale_centroid','num_ellipses','semi_axes_range','alpha','beta','gamma','smoothing_mask',
                             'tex_sigma','range_min','range_max','tex_sigma_edema','pertub_sigma']
@@ -195,7 +196,6 @@ class LesionGeneration3D(Dataset):
         for i in range(num_lesions):
             gamma = 0
             tex_sigma_edema = 0
-
             x_corr,y_corr,z_corr = np.nonzero(roi_with_masks[:,:,:]*image_mask)
             random_coord_index = np.random.choice(len(x_corr),1)
             centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index],z_corr[random_coord_index]])
@@ -214,6 +214,9 @@ class LesionGeneration3D(Dataset):
                 alpha = np.random.uniform(0.6,0.8)
                 beta = 1-alpha
 
+            if(self.which_data=='lits'):
+                alpha = np.random.uniform(0.6,0.8)
+                beta = 1-alpha
 
             smoothing_mask = np.random.uniform(0.6,0.8)
             smoothing_image = np.random.uniform(0.3,0.5)
@@ -236,7 +239,7 @@ class LesionGeneration3D(Dataset):
                     out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
                 
 
-            if(semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
+            if(semi_axes_range !=(2,5) and semi_axes_range !=(3,5) and self.which_data!='lits'):
                 semi_axes_range_edema = (semi_axes_range[0]+5,semi_axes_range[1]+5)
                 tex_sigma_edema = np.random.uniform(1,1.5)
                 beta = 1-alpha
@@ -257,7 +260,7 @@ class LesionGeneration3D(Dataset):
             else:
                 tex_noise = 1.0
             
-            if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
+            if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5) and self.which_data!='lits'):
                 tex_noise_edema = self.gaussian_noise(tex_sigma_edema,self.size,range_min,range_max)
                 if(not self.have_noise):
                     tex_noise_edema = 1.0
@@ -265,12 +268,21 @@ class LesionGeneration3D(Dataset):
                 smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
                 smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
                 
+                if(self.which_data == 'lits'):
+                    smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
+                    smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
+
+
                 smoothed_out-=smoothed_out.min()
                 smoothed_out/=smoothed_out.max()
 
+                if(self.which_data=='lits'):
+                    image1 = alpha*output_image - beta*smoothed_les
+                    image2 = alpha*smoothed_out - beta*smoothed_les
 
-                image1 = alpha*output_image + smoothed_les
-                image2 = alpha*smoothed_out + smoothed_les
+                else:
+                    image1 = alpha*output_image + smoothed_les
+                    image2 = alpha*smoothed_out + smoothed_les
 
                 image1[out_edema>0]=image2[out_edema>0]
                 image1[image1<0] = 0
@@ -279,19 +291,23 @@ class LesionGeneration3D(Dataset):
                 output_image = image1
                 output_image -= output_image.min()
                 output_image /= output_image.max()
-            if(self.have_smoothing and semi_axes_range==(2,5) or semi_axes_range==(3,5)):
+            if(self.have_smoothing and (semi_axes_range==(2,5) or semi_axes_range==(3,5)) or self.which_data=='lits'):
                 smoothed_les = gaussian_filter(out*tex_noise, sigma=smoothing_mask)
                 smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-                
 
-                if(np.random.choice([0,1])*self.dark):
+                if(self.which_data=='lits'):
+                    image1 = alpha*output_image - beta*smoothed_les
+                    image2 = alpha*smoothed_out - beta*smoothed_les
+
+                elif(np.random.choice([0,1])*self.dark):
                     image1 = alpha*output_image - beta*smoothed_les
                     image2 = alpha*smoothed_out - beta*smoothed_les
                 else:
                     image1 = alpha*output_image + beta*smoothed_les
                     image2 = alpha*smoothed_out + beta*smoothed_les
                 image1[out>0]=image2[out>0]
-                image1[image1<0] = 0.1
+                image1[image1<0] =0.1
+                
             # else:
             #     image1 = alpha*output_image*(1-out) + beta*out*tex_noise
             #     image1[image1<0] = 0
@@ -311,33 +327,49 @@ class LesionGeneration3D(Dataset):
                 param_dict[str(i)+'_'+total_param_list[j]] = total_params[j]
         
         param_dict['num_lesions'] = num_lesions
-        output_mask = skimage.morphology.binary_dilation(output_mask,skimage.morphology.cube(2))
+        #output_mask = skimage.morphology.binary_dilation(output_mask,skimage.morphology.cube(2))
         if(self.return_param):
             return output_image, output_mask, param_dict
         else:
             return output_image, output_mask
 
     def read_image(self,index,inter_image=False):
-        nii_img = nib.load(self.paths[index])
+        nii_img = nib.load(self.paths[index])            
         nii_img_affine = nii_img._affine
         nii_img = nii_img.get_fdata()
+        sub_min = 0
+        if(nii_img.min()<0):
+            sub_min = nii_img.min()
+            nii_img = nii_img - nii_img.min()
         image,img_crop_para = self.tight_crop_data(nii_img)
+        image+=sub_min
         image = skiform.resize(image, self.size, order=1, preserve_range=True)
         image -= image.min()
         image /= image.max() + 1e-7
-        if(inter_image):
+
+        if(self.gt_path!=None):
+            gt_img = nib.load(self.gt_path[index]).get_fdata()
+            gt_img = gt_img[img_crop_para[0]:img_crop_para[0] + img_crop_para[1], img_crop_para[2]:img_crop_para[2] + img_crop_para[3], img_crop_para[4]:img_crop_para[4] + img_crop_para[5]]
+            gt_mask = skiform.resize(gt_img, self.size, order=0, preserve_range=True)
+            gt_mask = gt_mask>0
+
+        else:
+            gt_mask = np.zeros_like(image)
+
+        if(inter_image and self.which_data!='lits'):
             angle = np.random.uniform(0, 180)
             axes = np.random.choice([0,1,2],2,replace=False)
             input_rotated1 = ndimage.rotate(image, float(angle), axes=axes, reshape=False, mode='nearest')
             image = input_rotated1
-        return image,nii_img_affine,img_crop_para
+        
+        return image,nii_img_affine,img_crop_para,gt_mask
     
     def __getitem__(self, index):
-        image,nii_img_affine,img_crop_para = self.read_image(index)
+        image,nii_img_affine,img_crop_para,gt_mask = self.read_image(index)
         clean_image = image
 
         interpolation_choice = np.random.choice(len(self.paths))
-        inter_image,nii_img_affine,_ = self.read_image(interpolation_choice,inter_image=True)
+        inter_image,nii_img_affine,_,_ = self.read_image(interpolation_choice,inter_image=True)
         clean_inter_image = inter_image
 
 
@@ -346,16 +378,15 @@ class LesionGeneration3D(Dataset):
             brain_mask_img = brain_mask_img[img_crop_para[0]:img_crop_para[0] + img_crop_para[1],img_crop_para[2]:img_crop_para[2] + img_crop_para[3],img_crop_para[4]:img_crop_para[4] + img_crop_para[5]]
             brain_mask_img = skiform.resize(brain_mask_img, self.size, order=0, preserve_range=True)
             
-
         else:
             brain_mask_img = ndimage.binary_fill_holes(image>0,structure=np.ones((3,3,3)))
         
         param_dict = {}
 
         if(self.return_param):
-            image, label, param_dict = self.simulation(image,inter_image, brain_mask_img,self.num_lesions)
+            image, label, param_dict = self.simulation(image,inter_image, brain_mask_img,self.num_lesions,gt_mask=gt_mask)
         else:
-            image, label = self.simulation(image,inter_image, brain_mask_img,self.num_lesions)
+            image, label = self.simulation(image,inter_image, brain_mask_img,self.num_lesions,gt_mask=gt_mask)
 
         return image.astype(np.single),label.astype(np.single),nii_img_affine,self.paths[index],param_dict
 

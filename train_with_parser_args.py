@@ -21,11 +21,13 @@ def train(mode,date,criterion,model,data,workers=4,batch=8,factor=1,device=0,che
     checkpoint_path = model_save_name + '_state_dict_best_dice' + str(checkpoint) + '.pth'
     
     ss_path = MODEL_DIR + date+'/'+'Self_Supervised'+'/'+data+'/'+exp_id+'/'
-    fine_tuning_path = ss_path+model+'_'+criterion + '_state_dict_best_dice' + str(pretrained) +'.pth'
+    pt_path = MODEL_DIR + date+'/'+'Pre_Training'+'/'+data+'/'+exp_id+'/'
+    fine_tuning_path = pt_path+model+'_'+criterion + '_state_dict_best_dice' + str(pretrained) +'.pth'
     ss_da_path = ss_path+model+'_'+criterion + '_state_dict_best_dice' + str(pretrained) +'.pth'
     ss_da_save_path = ss_path + str(pretrained) +'/'
 
     print(checkpoint_path)
+    print(pt_path)
     os.makedirs(MODEL_DIR+date+'/'+mode+'/'+data+'/'+exp_id, exist_ok=True)
     os.makedirs(RESULTS_DIR+date+'/'+mode+'/'+data+'/'+exp_id, exist_ok=True)
 
@@ -34,8 +36,12 @@ def train(mode,date,criterion,model,data,workers=4,batch=8,factor=1,device=0,che
     if(mode == 'Supervised'):
         datadict_train,datadict_val,datadict_test = helper_supervised(system_data_path,which_data=data,size=size,no_crop=no_crop)
     elif(mode == 'Self_Supervised'):
-        datadict_train,datadict_val = helper_self_supervised(system_data_path,which_data=data,scale_factor=scale_factor,sim_path_other=sim_path,size=size,no_crop=no_crop)
+        datadict_train,datadict_val = helper_self_supervised(which_data=data,scale_factor=scale_factor,sim_path_other=sim_path,size=size,no_crop=no_crop)
+    elif(mode == 'Pre_Training'):
+        datadict_train,datadict_val = helper_pre_training(which_data=data,scale_factor=scale_factor,sim_path_other=sim_path,size=size,no_crop=no_crop)
     elif(mode == 'Data_Augmentation'):
+        datadict_train,datadict_val = helper_data_augmentation(system_data_path,which_data=data,scale_factor=scale_factor,factor=factor,sim_path_other=sim_path,size=size,no_crop=no_crop)
+    elif(mode == 'Fine_Tuning_Data_Augmentation'):
         datadict_train,datadict_val = helper_data_augmentation(system_data_path,which_data=data,scale_factor=scale_factor,factor=factor,sim_path_other=sim_path,size=size,no_crop=no_crop)
     elif(mode == 'Fine_Tuning'):
         datadict_train,datadict_val = helper_fine_tuning(system_data_path,which_data=data,factor=factor,size=size,no_crop=no_crop)
@@ -57,10 +63,10 @@ def train(mode,date,criterion,model,data,workers=4,batch=8,factor=1,device=0,che
     
     device = 'cuda:'+str(device)
 
-    model = helper_model(model_type=model,which_data=data,hyper_parameters=hyper_parameters,device=device)
+    model = helper_model(model_type=model,which_data=data,hyper_parameters=hyper_parameters,device=device,size=size)
     criterion = helper_criterion(criterion_type=criterion)
     
-    if(fine_tuning_path!=None and mode == 'Fine_Tuning'):
+    if(fine_tuning_path!=None and (mode == 'Fine_Tuning_Data_Augmentation' or mode == 'Fine_Tuning')):
         print('----------------------------------Fine Tuning Path loaded----------------------------------')
         model.load_state_dict(torch.load(fine_tuning_path)['model_state_dict'])
 
@@ -119,16 +125,16 @@ def train(mode,date,criterion,model,data,workers=4,batch=8,factor=1,device=0,che
 
 if(__name__ =="__main__"):
     parser = argparse.ArgumentParser()
-    parser.add_argument("-mode",default='S',choices=['S','SS','SSDA','DA','FT','FPI'],
+    parser.add_argument("-mode",default='S',choices=['S','SS','SSDA','DA','FT','FTDA','PT','FPI'],
                         help="mode to run the model in")
-    parser.add_argument("-data",default='brats',choices=['texshapes','randomshapes','spheres','combinedv1','wmh','brats','busi','lits','stare'],help='Which data to run on?')
+    parser.add_argument("-data",default='brats',choices=['total3d','idrid','texshapes','randomshapes','spheres','combinedv1','wmh','brats','busi','lits'],help='Which data to run on?')
     parser.add_argument("-model",default='unet', choices=['unet','slimunetr','ducknet','saunet','nestedunet','halfunet','resunet','unetr','sacunet'],help='Which model to run ?')
     parser.add_argument("-loss",dest='criterion',default='focal + dice',choices=['dice','focal + dice'],help='Which loss to choose?')
     parser.add_argument("-workers",default=4,type=int)
     parser.add_argument("-device",default=0,type=int,choices=[0,1])
     parser.add_argument("-batch",default=8,type=int)
     parser.add_argument("-date",default="{:%d_%m_%y}".format(datetime.now()))
-    parser.add_argument("-sim_factor",type=float,dest='scale_factor',default=1.0,choices=[0.2,0.4,0.6,0.75,1.0])
+    parser.add_argument("-sim_factor",type=float,dest='scale_factor',default=1.0,choices=[0.2,0.4,0.6,0.75,1.0,2.0,5.0])
     parser.add_argument("-real_factor",type=float,dest='factor',default=1.0,choices=[0.2,0.4,0.6,0.75,1.0])
     parser.add_argument("-checkpoint",type=int,help='Give checkpoint index to start model training from')
     parser.add_argument("-pretrained",type=int,dest='pretrained',help='Give self supervised pre trained models index to start fine tuning')
@@ -141,7 +147,7 @@ if(__name__ =="__main__"):
     parser.add_argument("-data_path",dest='system_data_path',default=112,type=int,choices=[112,63,64])
     args = parser.parse_args()
 
-    mode_dir = {'S':'Supervised','SS':'Self_Supervised','SSDA':'Self_Supervised_Data_Adaptation','SSDA_v2':'Self_Supervised_Data_Adaptation_v2','DA':'Data_Augmentation','FT':'Fine_Tuning'}
+    mode_dir = {'FTDA':'Fine_Tuning_Data_Augmentation','S':'Supervised','SS':'Self_Supervised','SSDA':'Self_Supervised_Data_Adaptation','SSDA_v2':'Self_Supervised_Data_Adaptation_v2','DA':'Data_Augmentation','FT':'Fine_Tuning','PT':'Pre_Training'}
     data_addresses = {63:'/mnt/d1bdf387-8fd2-4f57-8c8a-eba9ef0baff6',64:'/mnt/70b9cd2d-ce8a-4b10-bb6d-96ae6a51130a',112:'/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f',}
     args.system_data_path = data_addresses[args.system_data_path]
     args.mode = mode_dir[args.mode]

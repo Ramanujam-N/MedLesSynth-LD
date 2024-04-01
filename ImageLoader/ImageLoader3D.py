@@ -43,9 +43,6 @@ class ImageLoader3D(Dataset):
 
         data_dict = {}
 
-        if(self.data=='liver'):
-            image*=gt>0
-
         if(not self.no_crop):
             image,img_crop_para = self.tight_crop_data(image)
             shape = image.shape
@@ -62,10 +59,7 @@ class ImageLoader3D(Dataset):
         image/=image.max()+1e-12
 
         image = np.expand_dims(image,-1).astype(np.single)
-        if(self.data=='liver'):
-            gt = np.expand_dims(gt>1,-1).astype(np.single)
-        else:
-            gt = np.expand_dims(gt>0,-1).astype(np.single)
+        gt = np.expand_dims(gt>0,-1).astype(np.single)
 
         data_dict['input'] = image
         data_dict['gt'] = gt

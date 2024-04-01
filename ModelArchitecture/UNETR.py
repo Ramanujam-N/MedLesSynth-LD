@@ -27,7 +27,7 @@ class PatchEmbeddings(nn.Module):
         self.num_channels = config["num_channels"]
         self.hidden_size = config["hidden_size"]
         # Calculate the number of patches from the image size and patch size
-        self.num_patches = (self.image_size // self.patch_size) ** 3
+        self.num_patches = (self.image_size[0] // self.patch_size)*(self.image_size[1] // self.patch_size)*(self.image_size[2] // self.patch_size)
         # Create a projection layer to convert the image into patches
         # The layer projects each patch into a vector of size hidden_size
         self.projection = nn.Conv3d(self.num_channels, self.hidden_size, kernel_size=self.patch_size, stride=self.patch_size)
@@ -435,7 +435,7 @@ class Decoder(nn.Module):
         super().__init__()
         self.config = config
         self.num_head = config['num_hidden_layers']
-        self.patch_dim = (config['image_size']//config['patch_size'],config['image_size']//config['patch_size'],config['image_size']//config['patch_size'])
+        self.patch_dim = (config['image_size'][0]//config['patch_size'],config['image_size'][1]//config['patch_size'],config['image_size'][2]//config['patch_size'])
         # Assuming 12 layers
         self.embed_dim  = config['hidden_size']
         feature_list = [64,128,256,512]

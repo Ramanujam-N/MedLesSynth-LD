@@ -120,31 +120,20 @@ def idrid_index():
                         'test_names_flair':idrid_indexes[48:],'test_names_seg':gt_indexes[48:]}
         np.save('./idrid_indexes.npy',idrid_dictionary)
 
-idrid_index()
 
 
+def clean_liver():
+        liver_indexes = sorted(glob.glob('/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f/LabData/CleanLiver/*.nii.gz'))
+        mask_indexes = sorted(glob.glob('/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f/LabData/CleanLiver/*masks*.nii.gz'))
+        temp = []
+        for i in liver_indexes:
+                if(i not in mask_indexes):
+                        temp.append(i)
+        liver_indexes = temp
 
-# img_path = '/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f/LabData/IDRiD/Original Images/'
-# gt_path = '/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f/LabData/IDRiD/All Segmentation Groundtruths/'
-
-# train_gt_path = gt_path + 'Training Set/'
-# test_gt_path = gt_path + 'Testing Set/'
-
-# train_img_path = gt_path + 'Training Set/'
-# test_img_path = gt_path + 'Testing Set/'
-
-# gt_names = ['Haemorrhages','Hard Exudates','Microaneurysms','Soft Exudates']
-
-# gt_h = glob.glob(train_gt_path+gt_names[0]+'/*')
-# gt_he = glob.glob(train_gt_path+gt_names[1]+'/*')
-# gt_m = glob.glob(train_gt_path+gt_names[2]+'/*')
-# gt_se = glob.glob(train_gt_path+gt_names[3]+'/*')
-
-# train_imgs = glob.glob(train_img_path+'*')
-# for i in range(54):
-#         a = plt.imread(train_imgs[i])
-#         gt_temp = np.zeros_like(a)
-#         if(format(i, '02d') in gt_h):
-           
+        cleanliver_dictionary = {'images':liver_indexes,'masks':mask_indexes}
+        print(cleanliver_dictionary)
+        np.save('./clean_liver_indexes.npy',cleanliver_dictionary)
 
 
+        
