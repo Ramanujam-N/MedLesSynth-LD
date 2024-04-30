@@ -127,7 +127,7 @@ class LesionGeneration2D(Dataset):
         # 1. Select the length of the major axis length 
         # 2. Others just need to be a random ratio over the major axis length
         random_major_axes = np.random.randint(semi_axes_range[0],semi_axes_range[1],(num_ellipses,1))
-        random_minor_axes = np.concatenate([np.ones((num_ellipses,1)),np.random.uniform(0.1,0.8,size = (num_ellipses,1))],1)
+        random_minor_axes = np.concatenate([np.ones((num_ellipses,1)),np.random.uniform(0.5,0.8,size = (num_ellipses,1))],1)
         random_semi_axes = random_major_axes*random_minor_axes
 
         # Permuting the axes so that one axes doesn't end up being the major every time.
@@ -192,7 +192,7 @@ class LesionGeneration2D(Dataset):
         for i in range(num_lesions):
             gamma = 0
             tex_sigma_edema = 0
-
+            print(image_mask.shape)
             x_corr,y_corr = np.nonzero(roi_with_masks[:,:]*image_mask)
             random_coord_index = np.random.choice(len(x_corr),1)
             centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index]])
@@ -211,12 +211,12 @@ class LesionGeneration2D(Dataset):
                 beta = 1-alpha
 
             if(self.which_data=='busi'):
-                alpha = np.random.uniform(0.4,0.5)
+                alpha = np.random.uniform(0.8,0.9) # 0.4 0.5
                 beta = 1-alpha
 
             smoothing_mask = np.random.uniform(0.6,0.8)
             if(self.which_data=='busi'):
-                smoothing_mask = np.random.uniform(1.6,1.8)
+                smoothing_mask = np.random.uniform(0.6,0.8)
 
             smoothing_image = np.random.uniform(0.3,0.5)
 
@@ -266,7 +266,7 @@ class LesionGeneration2D(Dataset):
                 else:
                     smoothed_les = gaussian_filter(out*tex_noise, sigma=smoothing_mask)
                     if(self.have_texture):
-                        smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
+                        smoothed_out = output_image #+ 0.5*inter_image, sigma=smoothing_image)
                     else:
                         smoothed_out = output_image
 
@@ -274,9 +274,10 @@ class LesionGeneration2D(Dataset):
                 smoothed_out/=smoothed_out.max()
 
                 if(self.which_data=='busi'):
-                    image1 = alpha*output_image - beta*smoothed_les
-                    image2 = alpha*smoothed_out - beta*smoothed_les
-
+                    image1 = alpha*output_image*(1-out) + beta*smoothed_les
+                    image2 = alpha*smoothed_out*(1-out) + beta*smoothed_les
+                    
+                    
                 else:
                     image1 = alpha*output_image + smoothed_les
                     image2 = alpha*smoothed_out + smoothed_les
@@ -288,19 +289,21 @@ class LesionGeneration2D(Dataset):
                     image1[out>0]=image2[out>0]
 
                 image1[image1<0] = 0
-
+                # image1[out>0] = ndimage.grey_erosion(image1*(out>0),structure = np.ones((1,5)))[out>0]
+                dilated_out = ndimage.binary_dilation(out>0,structure=np.ones((4,4)))
+                image1[dilated_out>0] = gaussian_filter(image1[dilated_out>0],sigma=3)
                 
             
             if(self.have_smoothing and semi_axes_range==(2,5) or semi_axes_range==(3,5)):
                 smoothed_les = gaussian_filter(out*tex_noise, sigma=smoothing_mask)
                 if(not self.have_texture):
-                    smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
+                    smoothed_out = output_image
                 else:
-                    smoothed_out = gaussian_filter(output_image, sigma=smoothing_image)
+                    smoothed_out = output_image
                 
                 if(self.which_data=='busi'):
-                    image1 = alpha*output_image - beta*smoothed_les
-                    image2 = alpha*smoothed_out - beta*smoothed_les
+                    image1 = alpha*output_image*(1-out) + beta*smoothed_les
+                    image2 = alpha*smoothed_out*(1-out) + beta*smoothed_les
 
                 elif(np.random.choice([0,1])*self.dark):
                     image1 = alpha*output_image - beta*smoothed_les
@@ -310,7 +313,10 @@ class LesionGeneration2D(Dataset):
                     image2 = alpha*smoothed_out + beta*smoothed_les
                 
                 image1[out>0]=image2[out>0]
-                image1[image1<0] = 0.1
+                image1[image1<0] = 0
+                # image1[out>0] = ndimage.grey_erosion(image1*(out>0),structure = np.ones((1,5)))[out>0]
+                dilated_out = ndimage.binary_dilation(out>0,structure=np.ones((10,10)))
+                image1[dilated_out>0] = gaussian_filter(image1[dilated_out>0],sigma=3)
 
             output_image = image1
             output_image -= output_image.min()

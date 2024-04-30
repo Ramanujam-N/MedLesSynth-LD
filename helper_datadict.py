@@ -2,6 +2,10 @@ from ModelArchitecture.Transformations import *
 from ImageLoader.ImageLoader3D import ImageLoader3D
 from ImageLoader.ImageLoader2D import ImageLoader2D
 from ImageLoader.FPILoader3D import FPILoader3D
+from ImageLoader.FPILoader2D import FPILoader2D
+from ImageLoader.CutPaste3D import CutPaste3D
+from ImageLoader.CutPaste2D import CutPaste2D
+
 from ModelArchitecture.DUCK_Net import DuckNet,DuckNet_smaller
 from ModelArchitecture.UNet import NestedUNet,UNet,HalfUNet,ResUNet,SA_UNet,SAC_UNet
 from ModelArchitecture.UNet2D import NestedUNet2D,UNet2D,HalfUNet2D,ResUNet2D,SA_UNet2D,SAC_UNet2D
@@ -23,6 +27,7 @@ from tqdm import tqdm
 import skimage
 import torchvision
 from torch.utils.data import DataLoader,ConcatDataset
+import json
 
 CURRENT_DIRECTORY = os.getcwd()
 PARENT_DIRECTORY = os.path.dirname(CURRENT_DIRECTORY)
@@ -271,6 +276,239 @@ def helper_self_supervised(which_data='brats',scale_factor=1.0,sim_path_other=No
 
     return datadict_train,datadict_val
 
+def helper_fpi(system_data_path,which_data='brats',factor=1.0,scale_factor=1.0,sim_path_other=None,size=(128,128,128),no_crop=False):
+    sim_path = sim_path_other
+    augementation_factor = factor
+
+    
+    train_size = 42
+    val_size = 6
+
+    if(which_data=='wmh'):
+        # White Matter Hyperintensities
+        
+        wmh_indexes = np.load('./Data_splits/Train_val_test_42_6_x/wmh_indexes.npy', allow_pickle=True).item()
+        wmh_indexes = helper_path_configuration(wmh_indexes,system_data_path)
+
+        wmh_indexes['train_names_flair'],wmh_indexes['train_names_seg'] = wmh_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],wmh_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        wmh_indexes['val_names_flair'],wmh_indexes['val_names_seg'] = wmh_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],wmh_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+
+        real_datadict_train = ImageLoader3D(wmh_indexes['train_names_flair'],wmh_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop)
+        real_datadict_val = ImageLoader3D(wmh_indexes['val_names_flair'],wmh_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop)
+
+    elif(which_data=='brats'):
+        # BraTS
+
+        brats_indexes = np.load('./Data_splits/Train_val_test_42_6_x/brats_indexes.npy', allow_pickle=True).item()
+        brats_indexes = helper_path_configuration(brats_indexes,system_data_path)
+
+        brats_indexes['train_names_flair'],brats_indexes['train_names_seg'] = brats_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],brats_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        brats_indexes['val_names_flair'],brats_indexes['val_names_seg'] = brats_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],brats_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+        real_datadict_train = ImageLoader3D(brats_indexes['train_names_flair'],brats_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop)
+        real_datadict_val = ImageLoader3D(brats_indexes['val_names_flair'],brats_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop)
+    
+    elif(which_data=='lits'):
+        # LiTS
+
+        liver_indexes = np.load('./Data_splits/Train_val_test_42_6_x/liver_indexes.npy', allow_pickle=True).item()
+        liver_indexes = helper_path_configuration(liver_indexes,system_data_path)
+
+        liver_indexes['train_names_flair'],liver_indexes['train_names_seg'] = liver_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],liver_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        liver_indexes['val_names_flair'],liver_indexes['val_names_seg'] = liver_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],liver_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+        real_datadict_train = ImageLoader3D(liver_indexes['train_names_flair'],liver_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop,data='liver')
+        real_datadict_val = ImageLoader3D(liver_indexes['val_names_flair'],liver_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop,data='liver')
+
+    elif(which_data=='busi'):
+        busi_indexes = np.load('./Data_splits/Train_val_test_42_6_x/busi_indexes.npy', allow_pickle=True).item()
+        busi_indexes = helper_path_configuration(busi_indexes,system_data_path)
+
+        real_datadict_train = ImageLoader2D(busi_indexes['train_names_flair'],busi_indexes['train_names_seg'],image_size=(512,512),type_of_imgs='nifty',transform = composed_transform_2d,data='busi')
+        real_datadict_val = ImageLoader2D(busi_indexes['val_names_flair'],busi_indexes['val_names_seg'],image_size=(512,512),type_of_imgs='nifty', transform = ToTensor2D(True),data='busi')
+    elif(which_data=='idrid'):
+        idrid_indexes = np.load('./Data_splits/Train_val_test_42_6_x/idrid_indexes.npy', allow_pickle=True).item()
+        idrid_indexes = helper_path_configuration(idrid_indexes,system_data_path)
+
+        real_datadict_train = ImageLoader2D(idrid_indexes['train_names_flair'],idrid_indexes['train_names_seg'],image_size=(512,512),type_of_imgs='nifty',transform = composed_transform_2d,data='busi')
+        real_datadict_val = ImageLoader2D(idrid_indexes['val_names_flair'],idrid_indexes['val_names_seg'],image_size=(512,512),type_of_imgs='nifty', transform = ToTensor2D(True),data='busi')
+
+    train_size = np.ceil(42*scale_factor).astype(np.int16)
+    val_size = np.ceil(6*scale_factor).astype(np.int16)
+
+    if(which_data=='wmh'):
+        # White Matter Hyperintensities
+        
+        wmh_indexes = np.load('./Data_splits/Train_val_test_42_6_x/wmh_indexes.npy', allow_pickle=True).item()
+        wmh_indexes = helper_path_configuration(wmh_indexes,system_data_path)
+
+        wmh_indexes['train_names_flair'],wmh_indexes['train_names_seg'] = wmh_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],wmh_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        wmh_indexes['val_names_flair'],wmh_indexes['val_names_seg'] = wmh_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],wmh_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+
+        datadict_train = FPILoader3D(wmh_indexes['train_names_flair'],wmh_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop)
+        datadict_val = FPILoader3D(wmh_indexes['val_names_flair'],wmh_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop)
+
+    elif(which_data=='brats'):
+        # BraTS
+
+        brats_indexes = np.load('./Data_splits/Train_val_test_42_6_x/brats_indexes.npy', allow_pickle=True).item()
+        brats_indexes = helper_path_configuration(brats_indexes,system_data_path)
+
+        brats_indexes['train_names_flair'],brats_indexes['train_names_seg'] = brats_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],brats_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        brats_indexes['val_names_flair'],brats_indexes['val_names_seg'] = brats_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],brats_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+        datadict_train = FPILoader3D(brats_indexes['train_names_flair'],brats_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop)
+        datadict_val = FPILoader3D(brats_indexes['val_names_flair'],brats_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop)
+    
+    elif(which_data=='lits'):
+        # LiTS
+
+        liver_indexes = np.load('./Data_splits/Train_val_test_42_6_x/liver_indexes.npy', allow_pickle=True).item()
+        liver_indexes = helper_path_configuration(liver_indexes,system_data_path)
+
+        liver_indexes['train_names_flair'],liver_indexes['train_names_seg'] = liver_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],liver_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        liver_indexes['val_names_flair'],liver_indexes['val_names_seg'] = liver_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],liver_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+        datadict_train = FPILoader3D(liver_indexes['train_names_flair'],liver_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop,data='liver')
+        datadict_val = FPILoader3D(liver_indexes['val_names_flair'],liver_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop,data='liver')
+
+    elif(which_data=='busi'):
+        busi_indexes = np.load('./Data_splits/Train_val_test_42_6_x/busi_indexes.npy', allow_pickle=True).item()
+        busi_indexes = helper_path_configuration(busi_indexes,system_data_path)
+
+        datadict_train = FPILoader2D(busi_indexes['train_names_flair'],busi_indexes['train_names_seg'],image_size=(512,512),type_of_imgs='nifty',transform = composed_transform_2d,data='busi')
+        datadict_val = FPILoader2D(busi_indexes['val_names_flair'],busi_indexes['val_names_seg'],image_size=(512,512),type_of_imgs='nifty', transform = ToTensor2D(True),data='busi')
+    elif(which_data=='idrid'):
+        idrid_indexes = np.load('./Data_splits/Train_val_test_42_6_x/idrid_indexes.npy', allow_pickle=True).item()
+        idrid_indexes = helper_path_configuration(idrid_indexes,system_data_path)
+
+        datadict_train = FPILoader2D(idrid_indexes['train_names_flair'],idrid_indexes['train_names_seg'],image_size=(512,512),type_of_imgs='nifty',transform = composed_transform_2d,data='busi')
+        datadict_val = FPILoader2D(idrid_indexes['val_names_flair'],idrid_indexes['val_names_seg'],image_size=(512,512),type_of_imgs='nifty', transform = ToTensor2D(True),data='busi')
+
+
+    datadict_train = torch.utils.data.ConcatDataset([real_datadict_train,datadict_train])
+    datadict_val = torch.utils.data.ConcatDataset([real_datadict_val,datadict_val])
+    return datadict_train,datadict_val
+
+
+
+def helper_cutpaste(system_data_path,which_data='brats',factor=1.0,scale_factor=1.0,sim_path_other=None,size=(128,128,128),no_crop=False):
+    sim_path = sim_path_other
+    augementation_factor = factor
+
+    
+    train_size = 42
+    val_size = 6
+
+    if(which_data=='wmh'):
+        # White Matter Hyperintensities
+        
+        wmh_indexes = np.load('./Data_splits/Train_val_test_42_6_x/wmh_indexes.npy', allow_pickle=True).item()
+        wmh_indexes = helper_path_configuration(wmh_indexes,system_data_path)
+
+        wmh_indexes['train_names_flair'],wmh_indexes['train_names_seg'] = wmh_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],wmh_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        wmh_indexes['val_names_flair'],wmh_indexes['val_names_seg'] = wmh_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],wmh_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+
+        real_datadict_train = ImageLoader3D(wmh_indexes['train_names_flair'],wmh_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop)
+        real_datadict_val = ImageLoader3D(wmh_indexes['val_names_flair'],wmh_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop)
+
+    elif(which_data=='brats'):
+        # BraTS
+
+        brats_indexes = np.load('./Data_splits/Train_val_test_42_6_x/brats_indexes.npy', allow_pickle=True).item()
+        brats_indexes = helper_path_configuration(brats_indexes,system_data_path)
+
+        brats_indexes['train_names_flair'],brats_indexes['train_names_seg'] = brats_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],brats_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        brats_indexes['val_names_flair'],brats_indexes['val_names_seg'] = brats_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],brats_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+        real_datadict_train = ImageLoader3D(brats_indexes['train_names_flair'],brats_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop)
+        real_datadict_val = ImageLoader3D(brats_indexes['val_names_flair'],brats_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop)
+    
+    elif(which_data=='lits'):
+        # LiTS
+
+        liver_indexes = np.load('./Data_splits/Train_val_test_42_6_x/liver_indexes.npy', allow_pickle=True).item()
+        liver_indexes = helper_path_configuration(liver_indexes,system_data_path)
+
+        liver_indexes['train_names_flair'],liver_indexes['train_names_seg'] = liver_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],liver_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        liver_indexes['val_names_flair'],liver_indexes['val_names_seg'] = liver_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],liver_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+        real_datadict_train = ImageLoader3D(liver_indexes['train_names_flair'],liver_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop,data='liver')
+        real_datadict_val = ImageLoader3D(liver_indexes['val_names_flair'],liver_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop,data='liver')
+
+    elif(which_data=='busi'):
+        busi_indexes = np.load('./Data_splits/Train_val_test_42_6_x/busi_indexes.npy', allow_pickle=True).item()
+        busi_indexes = helper_path_configuration(busi_indexes,system_data_path)
+
+        real_datadict_train = ImageLoader2D(busi_indexes['train_names_flair'],busi_indexes['train_names_seg'],image_size=(512,512),type_of_imgs='nifty',transform = composed_transform_2d,data='busi')
+        real_datadict_val = ImageLoader2D(busi_indexes['val_names_flair'],busi_indexes['val_names_seg'],image_size=(512,512),type_of_imgs='nifty', transform = ToTensor2D(True),data='busi')
+    elif(which_data=='idrid'):
+        idrid_indexes = np.load('./Data_splits/Train_val_test_42_6_x/idrid_indexes.npy', allow_pickle=True).item()
+        idrid_indexes = helper_path_configuration(idrid_indexes,system_data_path)
+
+        real_datadict_train = ImageLoader2D(idrid_indexes['train_names_flair'],idrid_indexes['train_names_seg'],image_size=(512,512),type_of_imgs='nifty',transform = composed_transform_2d,data='busi')
+        real_datadict_val = ImageLoader2D(idrid_indexes['val_names_flair'],idrid_indexes['val_names_seg'],image_size=(512,512),type_of_imgs='nifty', transform = ToTensor2D(True),data='busi')
+
+    train_size = np.ceil(42*scale_factor).astype(np.int16)
+    val_size = np.ceil(6*scale_factor).astype(np.int16)
+
+    if(which_data=='wmh'):
+        # White Matter Hyperintensities
+        
+        wmh_indexes = np.load('./Data_splits/Train_val_test_42_6_x/wmh_indexes.npy', allow_pickle=True).item()
+        wmh_indexes = helper_path_configuration(wmh_indexes,system_data_path)
+
+        wmh_indexes['train_names_flair'],wmh_indexes['train_names_seg'] = wmh_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],wmh_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        wmh_indexes['val_names_flair'],wmh_indexes['val_names_seg'] = wmh_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],wmh_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+
+        datadict_train = CutPaste3D(wmh_indexes['train_names_flair'],wmh_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop)
+        datadict_val = CutPaste3D(wmh_indexes['val_names_flair'],wmh_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop)
+
+    elif(which_data=='brats'):
+        # BraTS
+
+        brats_indexes = np.load('./Data_splits/Train_val_test_42_6_x/brats_indexes.npy', allow_pickle=True).item()
+        brats_indexes = helper_path_configuration(brats_indexes,system_data_path)
+
+        brats_indexes['train_names_flair'],brats_indexes['train_names_seg'] = brats_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],brats_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        brats_indexes['val_names_flair'],brats_indexes['val_names_seg'] = brats_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],brats_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+        datadict_train = CutPaste3D(brats_indexes['train_names_flair'],brats_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop)
+        datadict_val = CutPaste3D(brats_indexes['val_names_flair'],brats_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop)
+    
+    elif(which_data=='lits'):
+        # LiTS
+
+        liver_indexes = np.load('./Data_splits/Train_val_test_42_6_x/liver_indexes.npy', allow_pickle=True).item()
+        liver_indexes = helper_path_configuration(liver_indexes,system_data_path)
+
+        liver_indexes['train_names_flair'],liver_indexes['train_names_seg'] = liver_indexes['train_names_flair'][:np.int16(np.ceil(augementation_factor*train_size))],liver_indexes['train_names_seg'][:np.int16(np.ceil(augementation_factor*train_size))] 
+        liver_indexes['val_names_flair'],liver_indexes['val_names_seg'] = liver_indexes['val_names_flair'][:np.int16(np.ceil(augementation_factor*val_size))],liver_indexes['val_names_seg'][:np.int16(np.ceil(augementation_factor*val_size))] 
+
+        datadict_train = CutPaste3D(liver_indexes['train_names_flair'],liver_indexes['train_names_seg'],image_size=size,type_of_imgs='nifty',transform = composed_transform,no_crop=no_crop,data='liver')
+        datadict_val = CutPaste3D(liver_indexes['val_names_flair'],liver_indexes['val_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),no_crop=no_crop,data='liver')
+
+    elif(which_data=='busi'):
+        busi_indexes = np.load('./Data_splits/Train_val_test_42_6_x/busi_indexes.npy', allow_pickle=True).item()
+        busi_indexes = helper_path_configuration(busi_indexes,system_data_path)
+
+        datadict_train = CutPaste2D(busi_indexes['train_names_flair'],busi_indexes['train_names_seg'],image_size=(512,512),type_of_imgs='nifty',transform = composed_transform_2d,data='busi')
+        datadict_val = CutPaste2D(busi_indexes['val_names_flair'],busi_indexes['val_names_seg'],image_size=(512,512),type_of_imgs='nifty', transform = ToTensor2D(True),data='busi')
+    elif(which_data=='idrid'):
+        idrid_indexes = np.load('./Data_splits/Train_val_test_42_6_x/idrid_indexes.npy', allow_pickle=True).item()
+        idrid_indexes = helper_path_configuration(idrid_indexes,system_data_path)
+
+        datadict_train = CutPaste2D(idrid_indexes['train_names_flair'],idrid_indexes['train_names_seg'],image_size=(512,512),type_of_imgs='nifty',transform = composed_transform_2d,data='busi')
+        datadict_val = CutPaste2D(idrid_indexes['val_names_flair'],idrid_indexes['val_names_seg'],image_size=(512,512),type_of_imgs='nifty', transform = ToTensor2D(True),data='busi')
+
+
+    datadict_train = torch.utils.data.ConcatDataset([real_datadict_train,datadict_train])
+    datadict_val = torch.utils.data.ConcatDataset([real_datadict_val,datadict_val])
+    return datadict_train,datadict_val
 
 
 def helper_data_augmentation(system_data_path,which_data='brats',factor=1.0,scale_factor=1.0,sim_path_other=None,size=(128,128,128),no_crop=False):
@@ -340,49 +578,182 @@ def helper_data_augmentation(system_data_path,which_data='brats',factor=1.0,scal
         # WMH
         train_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*FLAIR.nii.gz')))[:train_size] 
         train_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*manualmask.nii.gz')))[:train_size]
+        train_names_json = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*.json')))[:train_size]
+
+        if(train_names_json!=[]):
+            new_train_names_flair = []
+            new_train_names_seg = []
+            for i in range(len(train_names_json)):
+                with open(train_names_json[i]) as json_file:
+                    data = json.load(json_file)
+                    clean_path = data['clean_path']
+                    if system_data_path + clean_path[41:] not in wmh_indexes['train_names_flair']:
+                        pass
+                    else:
+                        new_train_names_flair.append(train_names_flair[i]) 
+                        new_train_names_seg.append(train_names_seg[i])
+            train_names_flair = new_train_names_flair
+            train_names_seg = new_train_names_seg
 
         val_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*FLAIR.nii.gz')))[:val_size]
         val_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*manualmask.nii.gz')))[:val_size]
+        val_names_json = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*.json')))[:val_size]
+
+        if(val_names_json!=[]):
+            new_val_names_flair = []
+            new_val_names_seg = []
+            for i in range(len(val_names_json)):
+                with open(val_names_json[i]) as json_file:
+                    data = json.load(json_file)
+                    clean_path = data['clean_path']
+                    if (system_data_path + clean_path[41:] not in wmh_indexes['val_names_flair']) and (system_data_path + clean_path[41:] not in wmh_indexes['train_names_flair']):
+                        pass
+                    else:
+                        new_val_names_flair.append(val_names_flair[i])
+                        new_val_names_seg.append(val_names_seg[i])
+            val_names_flair = new_val_names_flair
+            val_names_seg = new_val_names_seg
 
         datadict_train = ImageLoader3D(train_names_flair,train_names_seg,type_of_imgs='nifty',image_size=size,no_crop=no_crop, transform = composed_transform)   
         datadict_val = ImageLoader3D(val_names_flair,val_names_seg,type_of_imgs='nifty',image_size=size,no_crop=no_crop, transform = ToTensor3D(True))  
 
+        print(len(datadict_train),len(datadict_val))
+        
     elif(which_data=='brats'):
         # BraTS
 
         train_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*FLAIR.nii.gz')))[:train_size] 
         train_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*manualmask.nii.gz')))[:train_size]
+        train_names_json = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*.json')))[:train_size]
+
+        if(train_names_json!=[]):
+            new_train_names_flair = []
+            new_train_names_seg = []
+            for i in range(len(train_names_json)):
+                with open(train_names_json[i]) as json_file:
+                    data = json.load(json_file)
+                    clean_path = data['clean_path']
+                    if system_data_path + clean_path[41:] not in brats_indexes['train_names_flair']:
+                        pass
+                    else:            
+                        new_train_names_flair.append(train_names_flair[i]) 
+                        new_train_names_seg.append(train_names_seg[i])
+            train_names_flair = new_train_names_flair
+            train_names_seg = new_train_names_seg
 
         val_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*FLAIR.nii.gz')))[:val_size]
         val_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*manualmask.nii.gz')))[:val_size]
+        val_names_json = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*.json')))[:val_size]
+
+        if(val_names_json!=[]):
+            new_val_names_flair = []
+            new_val_names_seg = []
+            for i in range(len(val_names_json)):
+                with open(val_names_json[i]) as json_file:
+                    data = json.load(json_file)
+                    clean_path = data['clean_path']
+                    if (system_data_path + clean_path[41:] not in brats_indexes['val_names_flair']) and (system_data_path + clean_path[41:] not in brats_indexes['train_names_flair']):
+                        pass
+                    else:
+                        new_val_names_flair.append(val_names_flair[i])
+                        new_val_names_seg.append(val_names_seg[i])
+            val_names_flair = new_val_names_flair
+            val_names_seg = new_val_names_seg
+
 
         datadict_train = ImageLoader3D(train_names_flair,train_names_seg,type_of_imgs='nifty',image_size=size,no_crop=no_crop, transform = composed_transform)   
         datadict_val = ImageLoader3D(val_names_flair,val_names_seg,type_of_imgs='nifty',image_size=size,no_crop=no_crop, transform = ToTensor3D(True))  
+        print(len(datadict_train),len(datadict_val))
 
     elif(which_data=='lits'):
         # LiTS
 
         train_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*FLAIR.nii.gz')))[:train_size] 
         train_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*manualmask.nii.gz')))[:train_size]
+        train_names_json = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*.json')))[:train_size]
+
+        if(train_names_json!=[]):
+            new_train_names_flair = []
+            new_train_names_seg = []
+            for i in range(len(train_names_json)):
+                with open(train_names_json[i]) as json_file:
+                    data = json.load(json_file)
+                    clean_path = data['clean_path']
+                    if system_data_path + clean_path[41:] not in liver_indexes['train_names_flair']:
+                        pass
+                    else:            
+                        new_train_names_flair.append(train_names_flair[i]) 
+                        new_train_names_seg.append(train_names_seg[i])
+            train_names_flair = new_train_names_flair
+            train_names_seg = new_train_names_seg
+
 
         val_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*FLAIR.nii.gz')))[:val_size]
         val_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*manualmask.nii.gz')))[:val_size]
+        val_names_json = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*.json')))[:val_size]
 
+        if(val_names_json!=[]):        
+            new_val_names_flair = []
+            new_val_names_seg = []
+            for i in range(len(val_names_json)):
+                with open(val_names_json[i]) as json_file:
+                    data = json.load(json_file)
+                    clean_path = data['clean_path']
+                    if (system_data_path + clean_path[41:] not in liver_indexes['val_names_flair']) and (system_data_path + clean_path[41:] not in liver_indexes['train_names_flair']):
+                        pass
+                    else:
+                        new_val_names_flair.append(val_names_flair[i])
+                        new_val_names_seg.append(val_names_seg[i])
+            val_names_flair = new_val_names_flair
+            val_names_seg = new_val_names_seg
 
         datadict_train = ImageLoader3D(train_names_flair,train_names_seg,type_of_imgs='nifty',image_size=size,no_crop=no_crop, transform = composed_transform)   
         datadict_val = ImageLoader3D(val_names_flair,val_names_seg,type_of_imgs='nifty',image_size=size,no_crop=no_crop, transform = ToTensor3D(True))  
+        print(len(datadict_train),len(datadict_val))
 
     elif(which_data=='busi'):
 
         train_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*image.png')))[:train_size] 
         train_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*mask.png')))[:train_size]
+        train_names_json = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*.json')))[:train_size]
+        
+        if(train_names_json!=[]):
+            new_train_names_flair = []
+            new_train_names_seg = []
+            for i in range(len(train_names_json)):
+                with open(train_names_json[i]) as json_file:
+                    data = json.load(json_file)
+                    clean_path = data['clean_path']
+                    if system_data_path + clean_path[41:] not in busi_indexes['train_names_flair']:
+                        pass
+                    else:            
+                        new_train_names_flair.append(train_names_flair[i]) 
+                        new_train_names_seg.append(train_names_seg[i])
+            train_names_flair = new_train_names_flair
+            train_names_seg = new_train_names_seg
 
         val_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*image.png')))[:val_size]
         val_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*mask.png')))[:val_size]
-
+        val_names_json = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*.json')))[:val_size]
+        
+        if(val_names_json!=[]):
+            new_val_names_flair = []
+            new_val_names_seg = []
+            for i in range(len(val_names_json)):
+                with open(val_names_json[i]) as json_file:
+                    data = json.load(json_file)
+                    clean_path = data['clean_path']
+                    if (system_data_path + clean_path[41:] not in busi_indexes['val_names_flair']) and (system_data_path + clean_path[41:] not in busi_indexes['train_names_flair']):
+                        pass
+                    else:
+                        new_val_names_flair.append(val_names_flair[i])
+                        new_val_names_seg.append(val_names_seg[i])
+            val_names_flair = new_val_names_flair
+            val_names_seg = new_val_names_seg
         
         datadict_train = ImageLoader2D(train_names_flair,train_names_seg,image_size=(512,512),type_of_imgs='png',transform = composed_transform_2d,data='busi')
         datadict_val = ImageLoader2D(val_names_flair,val_names_seg,image_size=(512,512),type_of_imgs='png', transform = ToTensor2D(True),data='busi')
+        print(len(datadict_train),len(datadict_val))
 
     elif(which_data=='idrid'):
 

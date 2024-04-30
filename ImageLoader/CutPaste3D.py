@@ -10,13 +10,11 @@ from skimage.io import imread
 from tqdm import tqdm
 from skimage.exposure import rescale_intensity,equalize_hist
 import numbers
-from scipy import ndimage
 import skimage
-
-class FPILoader3D(Dataset):
+class CutPaste3D(Dataset):
     def __init__(self,paths,gt_path=None,image_size =(128,128,128),type_of_imgs = 'nifty',no_crop=False, transform=None,data='wmh',resize=True, return_size = False,return_orig=False,scale_factor=5):
         self.paths = [*paths]*scale_factor
-        self.gt_path=[*gt_path]*scale_factor
+        self.gt_path = [*gt_path]*scale_factor
         self.transform = transform
         self.image_size = image_size
         self.type_of_imgs = type_of_imgs
@@ -29,6 +27,7 @@ class FPILoader3D(Dataset):
             self.image_size = (int(image_size), int(image_size))
     def __len__(self,):
         return len(self.paths)
+
     def read_image(self,index,inter_image=False):
         nii_img = nib.load(self.paths[index])            
         nii_img_affine = nii_img._affine
@@ -58,7 +57,7 @@ class FPILoader3D(Dataset):
         image,affine,img_crop_para,gt_mask,roi_mask = self.read_image(index)
         clean_image = image
         shape = image.shape
-
+        
         interpolation_choice = np.random.choice(len(self.paths))
         inter_image,nii_img_affine,_,inter_gt,_ = self.read_image(interpolation_choice,inter_image=True)
         clean_inter_image = inter_image
@@ -66,12 +65,24 @@ class FPILoader3D(Dataset):
         data_dict = {}
 
         image_mask = (image>0.1)*(1-gt_mask)
-        outline_mask = (image>0.05)
+        outline_mask = (image>0.1)
         x_corr,y_corr,z_corr = np.nonzero(image_mask)
         random_coord_index = np.random.choice(len(x_corr),1)
         centroid = np.array([x_corr[random_coord_index],y_corr[random_coord_index],z_corr[random_coord_index]])
-        width = np.random.uniform(0.1*self.image_size[0],0.4*self.image_size[0]) 
+        width = np.random.uniform(0.1*self.image_size[0],0.4*self.image_size[0])
         alpha = np.random.uniform(0.1,0.9)
+
+        # centroid = (int(centroid[0]),int(centroid[1]),int(centroid[2]))
+        # coords_x = (max(int(centroid[0]-width),0),min(int(centroid[0]+width),128)) 
+        # coords_y = (max(int(centroid[1]-width),0),min(int(centroid[1]+width),128))
+        # coords_z = (max(int(centroid[2]-width),0),min(int(centroid[2]+width),128))
+
+        # gt = np.zeros_like(image)
+        # gt[coords_x[0]:coords_x[1],coords_y[0]:coords_y[1],coords_z[0]:coords_z[1]] = 1
+        # gt*=image_mask
+
+
+        # image[gt>0] = inter_image[gt>0] 
 
         labels = skimage.measure.label(inter_gt,background=0)
         regions = skimage.measure.regionprops(labels)
@@ -94,7 +105,7 @@ class FPILoader3D(Dataset):
             centroid[1] += - (centroid[1]-y_width//2)
         if(centroid[1]+np.ceil(y_width/2) >=128):
             centroid[1] -= centroid[1]+np.ceil(y_width/2) - 128
-
+        
         if(centroid[2]-z_width//2 <0):
             centroid[2] += - (centroid[2]-z_width//2)
         if(centroid[2]+np.ceil(z_width/2) >=128):
@@ -109,11 +120,12 @@ class FPILoader3D(Dataset):
         gt[coords_x[0]:coords_x[1],coords_y[0]:coords_y[1],coords_z[0]:coords_z[1]] = 2
 
 
-        image[coords_x[0]:coords_x[1],coords_y[0]:coords_y[1],coords_z[0]:coords_z[1]] = (1-alpha)*inter_image[min_row:max_row,min_col:max_col,min_dep:max_dep] + alpha*image[coords_x[0]:coords_x[1],coords_y[0]:coords_y[1],coords_z[0]:coords_z[1]]
+        image[coords_x[0]:coords_x[1],coords_y[0]:coords_y[1],coords_z[0]:coords_z[1]] = inter_image[min_row:max_row,min_col:max_col,min_dep:max_dep]
 
         image = image*outline_mask
         gt = gt>0
         gt = gt*outline_mask
+
         # image = np.expand_dims(image,-1).astype(np.single)
         # gt = np.expand_dims(gt>0,-1).astype(np.single)
 
@@ -126,11 +138,11 @@ class FPILoader3D(Dataset):
         #     data_dict['crop_para'] = img_crop_para
         #     data_dict['path'] = self.paths[index]
 
+
         # if(self.transform):
         #     data_dict = self.transform(data_dict)
 
         # return data_dict
-    
         return image.astype(np.single),gt.astype(np.single),nii_img_affine
 
 

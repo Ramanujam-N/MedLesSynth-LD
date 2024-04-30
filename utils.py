@@ -136,4 +136,11 @@ def clean_liver():
         np.save('./clean_liver_indexes.npy',cleanliver_dictionary)
 
 
-        
+def nimh_indexes():
+        img_indexes = sorted(glob.glob('/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f/LabData/27_9_23/3d/**/T1_fast_restore.nii.gz'))
+        mask_indexes = sorted(glob.glob('/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f/LabData/27_9_23/3d/**/T1_biascorr_brain_mask.nii.gz'))
+        wmh_indexes = sorted(glob.glob('/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f/LabData/27_9_23/3d/**/T1_fast_seg.nii.gz'))
+
+        cleannimh_dictionary = {'images':img_indexes,'masks':mask_indexes,'tissue':wmh_indexes}
+        print(cleannimh_dictionary)
+        np.save('./clean_nimh_indexes.npy',cleannimh_dictionary)

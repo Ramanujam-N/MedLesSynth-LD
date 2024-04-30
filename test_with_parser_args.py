@@ -171,13 +171,14 @@ if(__name__ =="__main__"):
     parser.add_argument("-combined_check",default='brats',choices = ['brats','wmh'],help='Which data to check in combined')
     parser.add_argument("-no_crop",default=False,action='store_true',help='To not have the model tight crop the images')    
     parser.add_argument("-optthresh",action='store_true')
-    parser.add_argument("-data_path",dest='system_data_path',default=112,type=int,choices=[112,63,64])
+    parser.add_argument("-data_path",dest='system_data_path',default=112,type=int,choices=[112,131,63,64])
+    parser.add_argument("-simulation_path",dest='sim_path',help='Path to simulated files')
 
     args = parser.parse_args()
 
     mode_dir = {'PT':'Pre_Training','FPI':'FPI','S':'Supervised','SS':'Self_Supervised','SSDA':'Self_Supervised_Data_Adaptation','SSDA_v2':'Self_Supervised_Data_Adaptation_v2','DA':'Data_Augmentation','FT':'Fine_Tuning'}
     args.mode = mode_dir[args.mode]
-    data_addresses = {63:'/mnt/d1bdf387-8fd2-4f57-8c8a-eba9ef0baff6',64:'/mnt/70b9cd2d-ce8a-4b10-bb6d-96ae6a51130a',112:'/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f',}
+    data_addresses = {131:'/mnt/a4ef64ea-1b6b-4423-b1d2-4794d2e97289',63:'/mnt/d1bdf387-8fd2-4f57-8c8a-eba9ef0baff6',64:'/mnt/70b9cd2d-ce8a-4b10-bb6d-96ae6a51130a',112:'/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f',}
     args.system_data_path = data_addresses[args.system_data_path]
 
     print("-----------------------------Arguments for the current execution-----------------------------------")

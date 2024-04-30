@@ -14,7 +14,7 @@ def normalize(image):
     return image
 
 class BackgroundGeneration2D(Dataset):
-    def __init__(self,type_of_imgs='png',have_texture=True,have_noise=True, have_smoothing=True, have_small=True, have_edema=True, return_param=True, transform=None, dark=True, which_data='wmh',perturb=False, size=(128,128),semi_axis_range=[(5,10)],centroid_scale=10,num_lesions=5,range_sampling=[1],num_ellipses=15):
+    def __init__(self,type_of_imgs='png',have_texture=True,have_noise=True, have_smoothing=True, have_small=True, have_edema=True, return_param=True, transform=None, dark=True, which_data='wmh',perturb=False, size=(128,128),semi_axis_range=[(5,10)],centroid_scale=10,num_lesions=5,range_sampling=[1],num_ellipses=15,num_imgs=210):
         self.transform = transform
         self.size = size
         self.have_texture = have_texture
@@ -32,7 +32,7 @@ class BackgroundGeneration2D(Dataset):
         self.centroid_scaling = centroid_scale
         self.range_sampling = range_sampling
         self.num_ellipses = num_ellipses
-        
+        self.num_imgs = num_imgs
     def ellipsoid(self,coord=(1,2),semi_a = 4, semi_b = 34, alpha=np.pi/4, beta=np.pi/4,img_dim=(128,128)):
         x = np.linspace(-img_dim[0]//2,np.ceil(img_dim[0]//2),img_dim[0])
         y = np.linspace(-img_dim[1]//2,np.ceil(img_dim[1]//2),img_dim[1])
@@ -73,14 +73,35 @@ class BackgroundGeneration2D(Dataset):
         return ellipsoid
         
     def gaussian_noise(self, sigma=1.0, size = (128,128), range_min=-0.3, range_max=1.0):
-        noise = np.random.random(size)
-        gaussian_noise = gaussian_filter(noise,sigma) + 0.5*gaussian_filter(noise,sigma/2) + 0.25*gaussian_filter(noise,sigma/4)
-        gaussian_noise_min = gaussian_noise.min()
-        gaussian_noise_max = gaussian_noise.max()
+        # noise = np.random.random(size)
+        # gaussian_noise = gaussian_filter(noise,sigma) + 0.5*gaussian_filter(noise,sigma/2) + 0.25*gaussian_filter(noise,sigma/4)
+        # gaussian_noise_min = gaussian_noise.min()
+        # gaussian_noise_max = gaussian_noise.max()
 
         # Normalizing  (a - amin)*(tmax-tmin)/(a_max - a_min) + tmin
-        tex_noise = ((gaussian_noise - gaussian_noise_min)*(range_max-range_min)/(gaussian_noise_max-gaussian_noise_min)) + range_min 
+        # tex_noise = ((gaussian_noise - gaussian_noise_min)*(range_max-range_min)/(gaussian_noise_max-gaussian_noise_min)) + range_min 
 
+
+        x,y = np.mgrid[0:size[0], 0:size[1]]
+
+
+        n= gaussian_filter(np.random.randn(*size),sigma =8) +0.5*gaussian_filter(np.random.randn(*size),sigma =4) +0.25*gaussian_filter(np.random.randn(*size),sigma =2)
+        n -= n.mean()
+        n /= n.std()
+        out = (np.sin(-(x/8) + 1.5* (n)) + 1)  
+        out -=out.min()
+        out /=out.max()+1e-7
+        ss = (out+n+0.5*np.random.randn(*size))
+        ss -=ss.min()
+        ss /= ss.max()
+        ss = ss*127
+
+        ss = (ss - x)
+        ss -=ss.min()
+        ss /= ss.max()
+        ss = ss**2.5
+
+        tex_noise = ss
         return tex_noise
     
     def shape_generation(self,scale_centroids,centroid_main,num_ellipses,semi_axes_range,perturb_sigma=[1,1],image_mask=1):
@@ -141,156 +162,30 @@ class BackgroundGeneration2D(Dataset):
         
         return final_region,1
 
-    def simulation(self,image,inter_image,image_mask,num_lesions=3):
+    def simulation(self):
         param_dict = {}
-        
-        roi = image_mask
-
-        roi_with_masks = roi
-        output_image = image 
-        output_mask = np.zeros_like(image_mask)
-        
-        total_param_list = ['scale_centroid','num_ellipses','semi_axes_range','alpha','beta','gamma','smoothing_mask',
-                            'tex_sigma','range_min','range_max','tex_sigma_edema','pertub_sigma']
+                
+        total_param_list = ['tex_sigma','range_min','range_max']
         
 
-        for i in range(num_lesions):
-            gamma = 0
-            tex_sigma_edema = 0
+        tex_sigma = np.random.uniform(0.4,0.7)
+        range_min = np.random.uniform(-0.5,0.5)
+        range_max = np.random.uniform(0.7,1)
 
-            x_corr,y_corr = np.nonzero(roi_with_masks[:,:]*image_mask)
-            random_coord_index = np.random.choice(len(x_corr),1)
-            centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index]])
-            # We need a loop and random choices tailored here for multiple lesions 
-
-            scale_centroid = np.random.randint(2,self.centroid_scaling)
-            num_ellipses = np.random.randint(1,self.num_ellipses)
-
-            semi_axes_range = self.ranges[int(np.random.choice(len(self.ranges),p=self.range_sampling))]
-
-            if(semi_axes_range==(2,5)):
-                alpha = np.random.uniform(0.5,0.8)
-                beta = 1-alpha
-            if(semi_axes_range!=(2,5)):
-                alpha = np.random.uniform(0.6,0.8)
-                beta = 1-alpha
-
-            if(self.which_data=='busi'):
-                alpha = np.random.uniform(0.4,0.5)
-                beta = 1-alpha
-
-            smoothing_mask = np.random.uniform(0.6,0.8)
-            if(self.which_data=='busi'):
-                smoothing_mask = np.random.uniform(1.6,1.8)
-
-            smoothing_image = np.random.uniform(0.3,0.5)
-
-            tex_sigma = np.random.uniform(0.4,0.7)
-            range_min = np.random.uniform(-0.5,0.5)
-            range_max = np.random.uniform(0.7,1)
-            perturb_sigma = np.random.uniform(0.5,5)
-
-            if(semi_axes_range == (2,5)):
-                small_sigma = np.random.uniform(1,2)
-                out = self.gaussian_small_shapes(image_mask,small_sigma)
-            else:   
-                out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask) 
-                while(shape_status==-1):
-                    print(shape_status)
-                    random_coord_index = np.random.choice(len(x_corr),1)
-                    centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index]])
-                    out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
-                
-            if(semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
-                semi_axes_range_edema = (semi_axes_range[0]+5,semi_axes_range[1]+5)
-                tex_sigma_edema = np.random.uniform(1,1.5)
-                beta = 1-alpha
-
-                gamma = np.random.uniform(0.5,0.7)
-                out_edema,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
-                while(shape_status==-1):
-                    print(shape_status)
-                    random_coord_index = np.random.choice(len(x_corr),1)
-                    centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index]])
-                    out_edema,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
-
-            output_mask = np.logical_or(output_mask,out)
-
-            if(self.have_noise and semi_axes_range !=(2,5)):
-                tex_noise = self.gaussian_noise(tex_sigma,self.size,range_min,range_max)
-            else:
-                tex_noise = 1.0
-            
-            if(self.have_smoothing and semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
-
-                if(self.have_edema):
-                    tex_noise_edema = self.gaussian_noise(tex_sigma_edema,self.size,range_min,range_max)
-
-                    smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
-                    smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-                else:
-                    smoothed_les = gaussian_filter(out*tex_noise, sigma=smoothing_mask)
-                    if(self.have_texture):
-                        smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-                    else:
-                        smoothed_out = output_image
-
-                smoothed_out-=smoothed_out.min()
-                smoothed_out/=smoothed_out.max()
-
-                if(self.which_data=='busi'):
-                    image1 = alpha*output_image - beta*smoothed_les
-                    image2 = alpha*smoothed_out - beta*smoothed_les
-
-                else:
-                    image1 = alpha*output_image + smoothed_les
-                    image2 = alpha*smoothed_out + smoothed_les
-
-                if(self.have_edema):
-                    output_mask = np.logical_or(output_mask,out_edema)
-                    image1[out_edema>0]=image2[out_edema>0]
-                else:
-                    image1[out>0]=image2[out>0]
-
-                image1[image1<0] = 0
-
-                
-            
-            if(self.have_smoothing and semi_axes_range==(2,5) or semi_axes_range==(3,5)):
-                smoothed_les = gaussian_filter(out*tex_noise, sigma=smoothing_mask)
-                if(not self.have_texture):
-                    smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-                else:
-                    smoothed_out = gaussian_filter(output_image, sigma=smoothing_image)
-                
-                if(self.which_data=='busi'):
-                    image1 = alpha*output_image - beta*smoothed_les
-                    image2 = alpha*smoothed_out - beta*smoothed_les
-
-                elif(np.random.choice([0,1])*self.dark):
-                    image1 = alpha*output_image - beta*smoothed_les
-                    image2 = alpha*smoothed_out - beta*smoothed_les
-                else:
-                    image1 = alpha*output_image + beta*smoothed_les
-                    image2 = alpha*smoothed_out + beta*smoothed_les
-                
-                image1[out>0]=image2[out>0]
-                image1[image1<0] = 0.1
-
-            output_image = image1
-            output_image -= output_image.min()
-            output_image /= output_image.max()
-
-            roi_with_masks *= (1-output_mask)>0
-            
-            total_params = [scale_centroid,num_ellipses,semi_axes_range,alpha,beta,gamma,smoothing_mask,
-                            tex_sigma,range_min,range_max,tex_sigma_edema,perturb_sigma]
-            
-            for j in range(len(total_params)):
-                param_dict[str(i)+'_'+total_param_list[j]] = total_params[j]
+        tex_noise = self.gaussian_noise(tex_sigma,self.size,range_min,range_max)
         
-        param_dict['num_lesions'] = num_lesions
-        #output_mask = skimage.morphology.binary_dilation(output_mask,skimage.morphology.square(2))
+        output_image = tex_noise
+        output_image -= output_image.min()
+        output_image /= output_image.max()
+
+        # roi_with_masks *= (1-output_mask)>0
+        
+        total_params = [tex_sigma,range_min,range_max]
+        
+        for j in range(len(total_params)):
+            param_dict[total_param_list[j]] = total_params[j]
+
+        output_mask = np.ones(self.size)
         if(self.return_param):
             return output_image, output_mask, param_dict
         else:
@@ -301,29 +196,19 @@ class BackgroundGeneration2D(Dataset):
         image = skiform.resize(image, self.size, order=1, preserve_range=True)
         image = normalize(image)
         return image
+    
     def __getitem__(self, index):
 
-        image = self.read_image(index)
-
-        #If texture exists have a interpolation image.
-        interpolation_choice = np.random.choice(len(self.paths))
-        inter_image = self.read_image(interpolation_choice)
-
-        if(self.which_data == 'busi'):
-            _mask_img = np.ones(image.shape)
-        elif(self.which_data == 'stare'):
-            _mask_img = image>0.1
-
         param_dict = {}
-
+        
         if(self.return_param):
-            image, label, param_dict = self.simulation(image,inter_image, _mask_img,self.num_lesions)
+            image, label, param_dict = self.simulation()
 
         else:
-            image, label = self.simulation(image,inter_image, _mask_img,self.num_lesions)
+            image, label = self.simulation()
 
-        return image.astype(np.single),label.astype(np.single),self.paths[index],param_dict
+        return image.astype(np.single),label.astype(np.single),param_dict
 
     def __len__(self):
         """Return the dataset size."""
-        return len(self.paths)
+        return self.num_imgs
