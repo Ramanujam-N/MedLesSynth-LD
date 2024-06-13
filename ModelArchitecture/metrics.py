@@ -1,5 +1,8 @@
 import numpy as np
-
+import scipy as sc
+import medpy.metric
+import skimage
+import matplotlib.pyplot as plt
 def Dice_Score(pred,target,threshold=0.5):
     smooth = 1
     pred_cmb = (pred > threshold).astype(float)
@@ -50,15 +53,26 @@ def FPR(pred,target,threshold=0.5):
     N = np.sum(1-target)
     return (FP+eps)/(N+eps)
 
-# Voxel Wise
-def F1_score(pred,target,threshold=0.5):
-    eps = 1e-7
-    pred = pred.reshape(-1)
-    target = target.reshape(-1)
+def Hausdorff_score(pred,target,threshold=0.5):
+    # eps = 1e-7
+    pred = (pred>threshold).astype(float)
     target = (target > 0).astype(float)
-
-    TP = np.sum(target*(pred>threshold))
-    FP = np.sum((1-target)*(pred>threshold))
-    FN = np.sum(target*(pred<threshold))
     
-    return (2*TP+eps)/(2*TP+FP+FN+eps)
+    pred_label,pred_cc = skimage.measure.label(pred*255,background = 0,return_num=True)
+    target_label,target_cc = skimage.measure.label(target*255,background = 0,return_num=True)
+    pred_w_intersect = np.zeros_like(pred_label)
+
+    for i in range(1,pred_cc+1):
+        prediction = pred_label == i
+
+        if((prediction*target).sum()):
+            pred_w_intersect = np.logical_or(prediction,pred_w_intersect)    
+    pred = pred_w_intersect
+
+    if(pred.sum()==0):
+        if(len(pred.shape)==2):
+            pred[0,0] = 1
+        else:
+            pred[0,0,0] = 1
+    hd95 = medpy.metric.binary.hd95(result=pred, reference = target)
+    return np.array(hd95)/max(pred.shape)

@@ -9,10 +9,11 @@ from PIL import Image
 from skimage.io import imread
 from tqdm import tqdm
 from skimage.exposure import rescale_intensity,equalize_hist
+from scipy.ndimage import gaussian_filter
 import numbers
 
-class ImageLoader3D(Dataset):
-    def __init__(self,paths,gt_paths,paths_clean=None,image_size =(128,128,128),type_of_imgs = 'nifty',no_crop=False, transform=None,data='wmh',resize=True, return_size = False,return_orig=False):
+class SmoothNoise3D(Dataset):
+    def __init__(self,paths,gt_paths,paths_clean=None,image_size =(128,128,128),type_of_imgs = 'nifty',no_crop=False, transform=None,data='wmh',resize=True, return_size = False,return_orig=False,sigma_noise=1,sigma_smooth=1,setting='smooth'):
         self.paths = paths
         self.gt_paths = gt_paths
         self.paths_clean = paths_clean
@@ -23,6 +24,9 @@ class ImageLoader3D(Dataset):
         self.resize = resize
         self.return_size = return_size
         self.return_orig = return_orig
+        self.sigma_noise = sigma_noise
+        self.sigma_smooth = sigma_smooth
+        self.setting = setting
         self.data = data
         if isinstance(image_size, numbers.Number):
             self.image_size = (int(image_size), int(image_size))
@@ -44,9 +48,10 @@ class ImageLoader3D(Dataset):
         data_dict = {}
         sub_min=0
         if(not self.no_crop):
-            if(image.min()<0):
-                sub_min = image.min()
-                image = image -image.min()
+            o_min = image.min()
+            if(o_min<0):
+                sub_min = o_min
+                image -= sub_min
             image,img_crop_para = self.tight_crop_data(image)
             shape = image.shape
             gt = gt[img_crop_para[0]:img_crop_para[0] + img_crop_para[1], img_crop_para[2]:img_crop_para[2] + img_crop_para[3], img_crop_para[4]:img_crop_para[4] + img_crop_para[5]]
@@ -57,6 +62,14 @@ class ImageLoader3D(Dataset):
 
         if(np.isnan(image).sum() or np.isnan(gt).sum()):
             print('Nan image:',self.paths[index])
+
+        image-=image.min()
+        image/=image.max() + 1e-12
+        
+        if(self.setting == 'smooth'):
+            image = gaussian_filter(image,sigma=self.sigma_smooth)
+        elif(self.setting == 'noise'):
+            image = self.sigma_noise*np.random.randn(*image.shape) + image
 
         image-=image.min()
         image/=image.max()+1e-12

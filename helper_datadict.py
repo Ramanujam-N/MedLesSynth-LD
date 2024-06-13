@@ -1,4 +1,6 @@
 from ModelArchitecture.Transformations import *
+from ImageLoader.SmoothNoise3D import SmoothNoise3D
+from ImageLoader.SmoothNoise2D import SmoothNoise2D
 from ImageLoader.ImageLoader3D import ImageLoader3D
 from ImageLoader.ImageLoader2D import ImageLoader2D
 from ImageLoader.FPILoader3D import FPILoader3D
@@ -16,6 +18,8 @@ from ModelArchitecture.Losses import LogCoshDiceLoss,BCE_Loss_Weighted,MS_SSIMLo
 from ModelArchitecture.Losses_truenet import CombinedLoss,DiceLoss
 from ModelArchitecture.Losses_AdaptiveRegionSpecific import Adaptive_Region_Specific_TverskyLoss
 from ModelArchitecture.metrics import Dice_Score
+
+from monai.losses import DiceCELoss
 import matplotlib.pyplot as plt
 import sys
 import os
@@ -51,23 +55,27 @@ composed_transform_2d = transforms.Compose([
             #RandomBrightness2D(),
             ToTensor2D(True)])
 
-def helper_resize(image,output,label,shape=(),crop_para=[]):
+def helper_resize(image,output,output_wothresh,label,shape=(),crop_para=[]):
     image=image.cpu().numpy().squeeze()
     output=output.cpu().numpy().squeeze()
+    output_wothresh = output_wothresh.cpu().numpy().squeeze()
     label=label.cpu().numpy().squeeze()
     if(len(label.shape)<=2):
-        return skimage.transform.resize(image, output_shape = label.shape,order=1,preserve_range=True),skimage.transform.resize(output, output_shape = label.shape,order=0,preserve_range=True),label
+        return skimage.transform.resize(image, output_shape = label.shape,order=1,preserve_range=True),skimage.transform.resize(output_wothresh, output_shape = label.shape,order=1,preserve_range=True),skimage.transform.resize(output, output_shape = label.shape,order=0,preserve_range=True),label
     
     shape = (int(shape[0]),int(shape[1]),int(shape[2]))
     #print(shape,label.shape)
     image = skimage.transform.resize(image, output_shape = shape,order=1,preserve_range=True)
+    output_wothresh = skimage.transform.resize(output_wothresh, output_shape = shape,order=1,preserve_range=True)
     output = skimage.transform.resize(output, output_shape = shape,order=0,preserve_range=True)
     actual_image = np.zeros_like(label)
     actual_output = np.zeros_like(label)
+    actual_output_wothresh = np.zeros_like(label)
     actual_image[crop_para[0]:crop_para[0] + crop_para[1], crop_para[2]:crop_para[2] + crop_para[3], crop_para[4]:crop_para[4] + crop_para[5]] = image
     actual_output[crop_para[0]:crop_para[0] + crop_para[1], crop_para[2]:crop_para[2] + crop_para[3], crop_para[4]:crop_para[4] + crop_para[5]] = output
+    actual_output_wothresh[crop_para[0]:crop_para[0] + crop_para[1], crop_para[2]:crop_para[2] + crop_para[3], crop_para[4]:crop_para[4] + crop_para[5]] = output_wothresh
     
-    return actual_image,actual_output,label
+    return actual_image,actual_output,actual_output_wothresh,label
 
 
 def helper_transformation(no_aug):
@@ -136,6 +144,46 @@ def helper_supervised(system_data_path,which_data='brats',size=(128,128,128),siz
     
     print(len(datadict_train),len(datadict_val),len(datadict_test))
     return datadict_train,datadict_val,datadict_test
+
+
+def helper_smooth_noise(system_data_path,which_data='brats',size=(128,128,128),no_crop=False,sigma_noise=1,sigma_smooth=1,setting='smooth'):
+    if(which_data=='wmh'):
+        # White Matter Hyperintensities
+        wmh_indexes = np.load('./Data_splits/Train_val_test_42_6_x/wmh_indexes.npy', allow_pickle=True).item()
+        wmh_indexes = helper_path_configuration(wmh_indexes,system_data_path)
+
+        datadict_test = SmoothNoise3D(wmh_indexes['test_names_flair'],wmh_indexes['test_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),data='wmh',no_crop=no_crop,return_size=True,return_orig=True,sigma_noise=sigma_noise,sigma_smooth=sigma_smooth,setting=setting)
+
+    elif(which_data=='brats'):
+        # Brain Tumor Segmentation Challenge
+        brats_indexes = np.load('./Data_splits/Train_val_test_42_6_x/brats_indexes.npy', allow_pickle=True).item()
+        brats_indexes = helper_path_configuration(brats_indexes,system_data_path)
+
+        datadict_test = SmoothNoise3D(brats_indexes['test_names_flair'],brats_indexes['test_names_seg'],image_size=size,type_of_imgs='nifty', transform = ToTensor3D(True),data='brats',no_crop=no_crop,return_size=True,return_orig=True,sigma_noise=sigma_noise,sigma_smooth=sigma_smooth,setting=setting)
+
+    elif(which_data=='lits'):
+        # Liver Tumor Segmentation
+        liver_indexes = np.load('./Data_splits/Train_val_test_42_6_x/liver_indexes.npy', allow_pickle=True).item()
+        liver_indexes = helper_path_configuration(liver_indexes,system_data_path)
+
+        datadict_test = SmoothNoise3D(liver_indexes['test_names_flair'],liver_indexes['test_names_seg'],type_of_imgs='nifty', transform = ToTensor3D(True),data='liver',no_crop=no_crop,return_size=True,return_orig=True,sigma_noise=sigma_noise,sigma_smooth=sigma_smooth,setting=setting)
+
+
+    elif(which_data=='busi'):
+        # Brain Tumor Segmentation Challenge
+        busi_indexes = np.load('./Data_splits/Train_val_test_42_6_x/busi_indexes.npy', allow_pickle=True).item()
+        busi_indexes = helper_path_configuration(busi_indexes,system_data_path)
+
+        datadict_test = SmoothNoise2D(busi_indexes['test_names_flair'],busi_indexes['test_names_seg'],image_size=size,type_of_imgs='png', transform = ToTensor2D(True),data='busi',return_size=True,return_orig=True,sigma_noise=sigma_noise,sigma_smooth=sigma_smooth,setting=setting)
+
+    elif(which_data=='idrid'):
+        # Brain Tumor Segmentation Challenge
+        idrid_indexes = np.load('./Data_splits/Train_val_test_42_6_x/idrid_indexes.npy', allow_pickle=True).item()
+        idrid_indexes = helper_path_configuration(idrid_indexes,system_data_path)
+
+        datadict_test = SmoothNoise2D(idrid_indexes['test_names_flair'],idrid_indexes['test_names_seg'],image_size=512,type_of_imgs='png', transform = ToTensor2D(True),data='idrid',return_size=True,return_orig=True,sigma_noise=sigma_noise,sigma_smooth=sigma_smooth,setting=setting)
+    
+    return [],[],datadict_test
 
 def helper_pre_training(which_data='brats',scale_factor=1.0,sim_path_other=None,size=(128,128,128),no_crop=False):
     sim_path = sim_path_other
@@ -716,40 +764,38 @@ def helper_data_augmentation(system_data_path,which_data='brats',factor=1.0,scal
         train_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*image.png')))[:train_size] 
         train_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*mask.png')))[:train_size]
         train_names_json = sorted(glob.glob((sim_path+'/'+which_data+'/TrainSet/*.json')))[:train_size]
-        
-        if(train_names_json!=[]):
-            new_train_names_flair = []
-            new_train_names_seg = []
-            for i in range(len(train_names_json)):
-                with open(train_names_json[i]) as json_file:
-                    data = json.load(json_file)
-                    clean_path = data['clean_path']
-                    if system_data_path + clean_path[41:] not in busi_indexes['train_names_flair']:
-                        pass
-                    else:            
-                        new_train_names_flair.append(train_names_flair[i]) 
-                        new_train_names_seg.append(train_names_seg[i])
-            train_names_flair = new_train_names_flair
-            train_names_seg = new_train_names_seg
+                
+        new_train_names_flair = []
+        new_train_names_seg = []
+        for i in range(len(train_names_json)):
+            with open(train_names_json[i]) as json_file:
+                data = json.load(json_file)
+                clean_path = data['clean_path']
+                if system_data_path + clean_path[41:] not in busi_indexes['train_names_flair']:
+                    pass
+                else:            
+                    new_train_names_flair.append(train_names_flair[i]) 
+                    new_train_names_seg.append(train_names_seg[i])
+        train_names_flair = new_train_names_flair
+        train_names_seg = new_train_names_seg
 
         val_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*image.png')))[:val_size]
         val_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*mask.png')))[:val_size]
         val_names_json = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*.json')))[:val_size]
         
-        if(val_names_json!=[]):
-            new_val_names_flair = []
-            new_val_names_seg = []
-            for i in range(len(val_names_json)):
-                with open(val_names_json[i]) as json_file:
-                    data = json.load(json_file)
-                    clean_path = data['clean_path']
-                    if (system_data_path + clean_path[41:] not in busi_indexes['val_names_flair']) and (system_data_path + clean_path[41:] not in busi_indexes['train_names_flair']):
-                        pass
-                    else:
-                        new_val_names_flair.append(val_names_flair[i])
-                        new_val_names_seg.append(val_names_seg[i])
-            val_names_flair = new_val_names_flair
-            val_names_seg = new_val_names_seg
+        new_val_names_flair = []
+        new_val_names_seg = []
+        for i in range(len(val_names_json)):
+            with open(val_names_json[i]) as json_file:
+                data = json.load(json_file)
+                clean_path = data['clean_path']
+                if (system_data_path + clean_path[41:] not in busi_indexes['val_names_flair']) and (system_data_path + clean_path[41:] not in busi_indexes['train_names_flair']):
+                    pass
+                else:
+                    new_val_names_flair.append(val_names_flair[i])
+                    new_val_names_seg.append(val_names_seg[i])
+        val_names_flair = new_val_names_flair
+        val_names_seg = new_val_names_seg
         
         datadict_train = ImageLoader2D(train_names_flair,train_names_seg,image_size=(512,512),type_of_imgs='png',transform = composed_transform_2d,data='busi')
         datadict_val = ImageLoader2D(val_names_flair,val_names_seg,image_size=(512,512),type_of_imgs='png', transform = ToTensor2D(True),data='busi')
@@ -946,6 +992,19 @@ def helper_model(model_type,which_data,hyper_parameters,device=0,size=(128,128,1
         model = UNet(out_channels=1,**hyper_parameters).to(device)
         if(which_data=='busi' or which_data=='idrid'):
             model = UNet2D(out_channels=1,**hyper_parameters).to(device)
+    
+    elif(model_type == 'unet_synth_tum'):
+        from monai.networks.nets import UNet 
+        model = UNet(
+            spatial_dims=3,
+            in_channels=1,
+            out_channels=3,
+            channels=(16, 32, 64, 128, 256),
+            strides=(2, 2, 2, 2),
+            num_res_units=2,
+        ).to(device)
+        model_dict = torch.load('./models/model.pt')
+        model.load_state_dict(model_dict['state_dict'])
 
     elif(model_type == 'unetr'):
         config = {
@@ -991,6 +1050,9 @@ def helper_criterion(criterion_type='dice',device=0):
     if(criterion_type == 'wbce'):
         criterion= BCE_Loss_Weighted(weight=5).to(device)
     
+    elif(criterion_type == 'dicece'):
+        criterion = DiceCELoss(sigmoid=True).to(device) 
+
     elif(criterion_type == 'bce'):
         criterion = nn.BCELoss().to(device)
     
@@ -1029,8 +1091,6 @@ def helper_train(epoch,model,criterion,optimizer,scheduler,train_losses,train_di
     epoch_loss = 0
     epoch_dice = 0
     model.train()
-    if(adapt_model!=None):
-        adapt_model.eval()
     train_size = len(trainloader)
     val_size = len(valloader)
 
@@ -1045,15 +1105,16 @@ def helper_train(epoch,model,criterion,optimizer,scheduler,train_losses,train_di
             torch.cuda.empty_cache()
             err = 0
             image = data['input'].to(device)
-            output = model.forward(image)
-            if(adapt_model!=None):
-                with torch.no_grad():
-                    label = adapt_model.forward(image)
+            output = model.forward(image)            
+            label = data['gt'].to(device)
+            if(adapt_model=='unet_synth_tum'):
+                # print(output[:,2:,:,:,:].shape)
+                err = criterion(output[:,2,:,:,:],label[:,0,:,:,:])
+                dice = Dice_Score(torch.sigmoid(output[:,2,:,:,:]).cpu().detach().numpy(),label[:,0,:,:,:].cpu().detach().numpy())
             else:
-                label = data['gt'].to(device)
+                err = criterion(output,label,wt = label)
+                dice = Dice_Score(output.cpu().detach().numpy(),label.cpu().detach().numpy())
 
-            err = criterion(output,label,wt = label)
-            dice = Dice_Score(output.cpu().detach().numpy(),label.cpu().detach().numpy())
             
             model.zero_grad()
             err.backward()
@@ -1079,15 +1140,15 @@ def helper_train(epoch,model,criterion,optimizer,scheduler,train_losses,train_di
             with torch.no_grad():
                 image = data['input'].to(device)
                 output = model.forward(image)
-            
-                if(adapt_model!=None):
-                    with torch.no_grad():
-                        label = adapt_model.forward(image)
-                else:
-                    label = data['gt'].to(device)
+                label = data['gt'].to(device)
 
-                err = criterion(output,label,wt =label)
-                dice = Dice_Score(output.cpu().detach().numpy(),label.cpu().detach().numpy())
+                if(adapt_model=='unet_synth_tum'):
+                    # print(output[:,2:,:,:,:].shape)
+                    err = criterion(output[:,2,:,:,:],label[:,0,:,:,:])
+                    dice = Dice_Score(torch.sigmoid(output[:,2,:,:,:]).cpu().detach().numpy(),label[:,0,:,:,:].cpu().detach().numpy())
+                else:
+                    err = criterion(output,label,wt = label)
+                    dice = Dice_Score(output.cpu().detach().numpy(),label.cpu().detach().numpy())
                 del image
                 del label
 

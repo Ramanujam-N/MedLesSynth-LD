@@ -514,8 +514,8 @@ class FocalLoss(nn.Module):
         # inputs = F.sigmoid(inputs)       
         
         #flatten label and prediction tensors
-        inputs = inputs.view(-1)
-        targets = targets.view(-1)
+        inputs = inputs.contiguous().view(-1)
+        targets = targets.contiguous().view(-1)
         
         #first compute binary cross-entropy 
         BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
@@ -539,8 +539,8 @@ class TverskyLoss(nn.Module):
         #inputs = F.sigmoid(inputs)       
         
         #flatten label and prediction tensors
-        inputs = inputs.view(-1)
-        targets = targets.view(-1)
+        inputs = inputs.contiguous().view(-1)
+        targets = targets.contiguous().view(-1)
         
         #True Positives, False Positives & False Negatives
         TP = (inputs * targets).sum()    

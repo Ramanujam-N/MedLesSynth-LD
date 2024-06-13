@@ -643,20 +643,20 @@ class LesionGeneration3D(Dataset):
             nii_img = nii_img - nii_img.min()
         image,img_crop_para = self.tight_crop_data(nii_img)
         image+=sub_min
-        image = skiform.resize(image, self.size, order=1, preserve_range=True ,anti_aliasing=False)
+        #image = skiform.resize(image, self.size, order=1, preserve_range=True ,anti_aliasing=True)
         image -= image.min()
         image /= image.max() + 1e-7
 
         if(self.gt_path!=None):
             gt_img = nib.load(self.gt_path[index]).get_fdata()
             gt_img = gt_img[img_crop_para[0]:img_crop_para[0] + img_crop_para[1], img_crop_para[2]:img_crop_para[2] + img_crop_para[3], img_crop_para[4]:img_crop_para[4] + img_crop_para[5]]
-            gt_mask = skiform.resize(gt_img, self.size, order=0, preserve_range=True)
+            #gt_mask = skiform.resize(gt_img, self.size, order=0, preserve_range=True)
             gt_mask = gt_mask>0
             roi_mask = None
         elif(self.roi_path!=None):
             roi_img = nib.load(self.roi_path[index]).get_fdata()
             roi_img = roi_img[img_crop_para[0]:img_crop_para[0] + img_crop_para[1], img_crop_para[2]:img_crop_para[2] + img_crop_para[3], img_crop_para[4]:img_crop_para[4] + img_crop_para[5]]
-            roi_mask = skiform.resize(roi_img, self.size, order=0, preserve_range=True)
+            #roi_mask = skiform.resize(roi_img, self.size, order=0, preserve_range=True)
             roi_mask = (roi_mask>1)*(roi_mask<2)
             roi_mask = ndimage.binary_dilation(roi_mask)
 

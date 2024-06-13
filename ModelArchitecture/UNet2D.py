@@ -127,7 +127,7 @@ class NestedUNet2D(nn.Module):
         self.deep_supervision = deep_supervision
 
         self.pool = nn.MaxPool2d(2, 2)
-        self.up = nn.Upsample(scale_factor=2, mode='trilinear', align_corners=True)
+        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
 
         self.conv0_0 = VGGBlock(in_channels, nb_filter[0], nb_filter[0])
         self.conv1_0 = VGGBlock(nb_filter[0], nb_filter[1], nb_filter[1])
@@ -345,10 +345,10 @@ class HalfUNet2D(nn.Module):
         # self.encoder5 = HalfUNet2D._block(features,features,name = 'enc5')
         # self.pool5 = nn.MaxPool2d(2)
 
-        self.upsample2 =  nn.Upsample(scale_factor=2,mode='trilinear')
-        self.upsample3 =  nn.Upsample(scale_factor=4,mode='trilinear')
-        self.upsample4 =  nn.Upsample(scale_factor=8,mode='trilinear')
-        # self.upsample5 =  nn.Upsample(scale_factor=16,mode='trilinear')
+        self.upsample2 =  nn.Upsample(scale_factor=2,mode='bilinear')
+        self.upsample3 =  nn.Upsample(scale_factor=4,mode='bilinear')
+        self.upsample4 =  nn.Upsample(scale_factor=8,mode='bilinear')
+        # self.upsample5 =  nn.Upsample(scale_factor=16,mode='bilinear')
 
         self.encoderfinal = HalfUNet2D._block(features,features,name = 'encf')
         self.convout_1 = nn.Conv2d(features,out_channels,kernel_size = 1, padding='same')
