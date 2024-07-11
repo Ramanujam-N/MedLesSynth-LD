@@ -6,7 +6,7 @@ import skimage.morphology
 import skimage.transform as skiform
 from scipy.ndimage import gaussian_filter
 from scipy import ndimage
-
+from perlin_noise import PerlinNoise
 
 def normalize(image):
     image-=image.min()
@@ -82,6 +82,7 @@ class BackgroundGeneration2D(Dataset):
         # tex_noise = ((gaussian_noise - gaussian_noise_min)*(range_max-range_min)/(gaussian_noise_max-gaussian_noise_min)) + range_min 
 
 
+
         x,y = np.mgrid[0:size[0], 0:size[1]]
 
 
@@ -99,9 +100,17 @@ class BackgroundGeneration2D(Dataset):
         ss = (ss - x)
         ss -=ss.min()
         ss /= ss.max()
-        ss = ss**2.5
+        ss = ss**np.random.uniform(1.5,2)
 
         tex_noise = ss
+
+        noise1 = PerlinNoise(octaves=50)
+        mult_noise = np.array([[noise1([i/size[0], j/size[1]]) for j in range(size[0])] for i in range(size[1])])
+        # mult_noise = np.random.uniform(0,1, size=tex_noise.shape)
+        mult_noise -= mult_noise.min()
+        mult_noise /= mult_noise.max()
+        mult_noise =0.1*mult_noise
+        tex_noise = tex_noise+np.ones_like(tex_noise)*mult_noise
         return tex_noise
     
     def shape_generation(self,scale_centroids,centroid_main,num_ellipses,semi_axes_range,perturb_sigma=[1,1],image_mask=1):

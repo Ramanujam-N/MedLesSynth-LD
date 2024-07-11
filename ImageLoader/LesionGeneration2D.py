@@ -6,7 +6,8 @@ import skimage.morphology
 import skimage.transform as skiform
 from scipy.ndimage import gaussian_filter
 from scipy import ndimage
-
+import matplotlib.pyplot as plt
+from perlin_noise import PerlinNoise
 
 def normalize(image):
     image-=image.min()
@@ -109,13 +110,16 @@ class LesionGeneration2D(Dataset):
         
     def gaussian_noise(self, sigma=1.0, size = (128,128), range_min=-0.3, range_max=1.0):
         noise = np.random.random(size)
-        gaussian_noise = gaussian_filter(noise,sigma) + 0.5*gaussian_filter(noise,sigma/2) + 0.25*gaussian_filter(noise,sigma/4)
+        noise1 = PerlinNoise(octaves=50)
+        gaussian_noise = np.array([[noise1([i/size[0], j/size[1]]) for j in range(size[0])] for i in range(size[1])])
+
+        # gaussian_noise = gaussian_filter(noise,sigma) + 0.5*gaussian_filter(noise,sigma/2) + 0.25*gaussian_filter(noise,sigma/4)
         gaussian_noise_min = gaussian_noise.min()
         gaussian_noise_max = gaussian_noise.max()
 
         # Normalizing  (a - amin)*(tmax-tmin)/(a_max - a_min) + tmin
         tex_noise = ((gaussian_noise - gaussian_noise_min)*(range_max-range_min)/(gaussian_noise_max-gaussian_noise_min)) + range_min 
-
+        tex_noise = 5*np.ones_like(tex_noise)*tex_noise
         return tex_noise
     
     def shape_generation(self,scale_centroids,centroid_main,num_ellipses,semi_axes_range,perturb_sigma=[1,1],image_mask=1):
@@ -127,7 +131,7 @@ class LesionGeneration2D(Dataset):
         # 1. Select the length of the major axis length 
         # 2. Others just need to be a random ratio over the major axis length
         random_major_axes = np.random.randint(semi_axes_range[0],semi_axes_range[1],(num_ellipses,1))
-        random_minor_axes = np.concatenate([np.ones((num_ellipses,1)),np.random.uniform(0.5,0.8,size = (num_ellipses,1))],1)
+        random_minor_axes = np.concatenate([np.ones((num_ellipses,1)),np.random.uniform(0.5,0.9,size = (num_ellipses,1))],1)
         random_semi_axes = random_major_axes*random_minor_axes
 
         # Permuting the axes so that one axes doesn't end up being the major every time.
@@ -155,26 +159,27 @@ class LesionGeneration2D(Dataset):
             return out,1
         
         # Perturb in a local neighbhour hood of the lesion
-        bounding_box = regions[0].bbox
+        # bounding_box = regions[0].bbox
 
-        noise_b_box = np.random.normal(size = self.size)
-        noise_b_box = gaussian_filter(noise_b_box,sigma=perturb_sigma) 
-        noise_b_box -= noise_b_box.min()
-        noise_b_box /= noise_b_box.max()
+        # noise_b_box = np.random.normal(size = self.size)
+        # noise_b_box = gaussian_filter(noise_b_box,sigma=perturb_sigma) 
+        # noise_b_box -= noise_b_box.min()
+        # noise_b_box /= noise_b_box.max()
 
-        thresholded_b_box = np.zeros_like(out)
-        thresholded_b_box[bounding_box[0]:bounding_box[2],bounding_box[1]:bounding_box[3]] = (noise_b_box>0.6)[bounding_box[0]:bounding_box[2],bounding_box[1]:bounding_box[3]]
+        # thresholded_b_box = np.zeros_like(out)
+        # thresholded_b_box[bounding_box[0]:bounding_box[2],bounding_box[1]:bounding_box[3]] = (noise_b_box>0.6)[bounding_box[0]:bounding_box[2],bounding_box[1]:bounding_box[3]]
 
-        labelled_threshold_b_box, nlabels = skimage.measure.label(thresholded_b_box, return_num=True)
-        labels_in_big_lesion = np.union1d(out * labelled_threshold_b_box, [])
-        labels_tob_removed = np.setdiff1d(np.arange(1, nlabels+1), labels_in_big_lesion)
-        for i in labels_tob_removed:
-            labelled_threshold_b_box[labelled_threshold_b_box == i] = 0
+        # labelled_threshold_b_box, nlabels = skimage.measure.label(thresholded_b_box, return_num=True)
+        # labels_in_big_lesion = np.union1d(out * labelled_threshold_b_box, [])
+        # labels_tob_removed = np.setdiff1d(np.arange(1, nlabels+1), labels_in_big_lesion)
+        # for i in labels_tob_removed:
+        #     labelled_threshold_b_box[labelled_threshold_b_box == i] = 0
 
-        final_region = out + labelled_threshold_b_box >0
+        # final_region = out + labelled_threshold_b_box >0
         
         
-        return final_region,1
+        # return final_region,1
+        return out,1
 
     def simulation(self,image,inter_image,image_mask,num_lesions=3,gt_mask=None):
         param_dict = {}
@@ -182,6 +187,7 @@ class LesionGeneration2D(Dataset):
         roi = image_mask
 
         roi_with_masks = roi*(1-gt_mask)
+        roi_with_masks[self.size[0]//2:,:] = 0
         output_image = image 
         output_mask = gt_mask
         
@@ -192,7 +198,6 @@ class LesionGeneration2D(Dataset):
         for i in range(num_lesions):
             gamma = 0
             tex_sigma_edema = 0
-            print(image_mask.shape)
             x_corr,y_corr = np.nonzero(roi_with_masks[:,:]*image_mask)
             random_coord_index = np.random.choice(len(x_corr),1)
             centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index]])
@@ -211,7 +216,7 @@ class LesionGeneration2D(Dataset):
                 beta = 1-alpha
 
             if(self.which_data=='busi'):
-                alpha = np.random.uniform(0.8,0.9) # 0.4 0.5
+                alpha = np.random.uniform(0.5,0.8) # 0.4 0.5
                 beta = 1-alpha
 
             smoothing_mask = np.random.uniform(0.6,0.8)
@@ -221,7 +226,7 @@ class LesionGeneration2D(Dataset):
             smoothing_image = np.random.uniform(0.3,0.5)
 
             tex_sigma = np.random.uniform(0.4,0.7)
-            range_min = np.random.uniform(-0.5,0.5)
+            range_min = np.random.uniform(0,0.3)
             range_max = np.random.uniform(0.7,1)
             perturb_sigma = np.random.uniform(0.5,5)
 
@@ -264,7 +269,8 @@ class LesionGeneration2D(Dataset):
                     smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
                     smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
                 else:
-                    smoothed_les = gaussian_filter(out*tex_noise, sigma=smoothing_mask)
+                    # smoothed_les = gaussian_filter(out*(tex_noise+output_image), sigma=smoothing_mask)
+                    smoothed_les = out*(tex_noise*image)
                     if(self.have_texture):
                         smoothed_out = output_image #+ 0.5*inter_image, sigma=smoothing_image)
                     else:
@@ -274,8 +280,8 @@ class LesionGeneration2D(Dataset):
                 smoothed_out/=smoothed_out.max()
 
                 if(self.which_data=='busi'):
-                    image1 = alpha*output_image*(1-out) + beta*smoothed_les
-                    image2 = alpha*smoothed_out*(1-out) + beta*smoothed_les
+                    image1 = alpha*output_image*(1-out) - beta*smoothed_les
+                    image2 = alpha*smoothed_out - beta*smoothed_les
                     
                     
                 else:
@@ -295,15 +301,16 @@ class LesionGeneration2D(Dataset):
                 
             
             if(self.have_smoothing and semi_axes_range==(2,5) or semi_axes_range==(3,5)):
-                smoothed_les = gaussian_filter(out*tex_noise, sigma=smoothing_mask)
+                # smoothed_les = gaussian_filter(out*(tex_noise+output_image), sigma=smoothing_mask)
+                smoothed_les = out*(tex_noise*image)
                 if(not self.have_texture):
                     smoothed_out = output_image
                 else:
                     smoothed_out = output_image
                 
                 if(self.which_data=='busi'):
-                    image1 = alpha*output_image*(1-out) + beta*smoothed_les
-                    image2 = alpha*smoothed_out*(1-out) + beta*smoothed_les
+                    image1 = alpha*output_image*(1-out) - beta*smoothed_les
+                    image2 = alpha*smoothed_out - beta*smoothed_les
 
                 elif(np.random.choice([0,1])*self.dark):
                     image1 = alpha*output_image - beta*smoothed_les

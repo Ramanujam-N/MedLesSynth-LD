@@ -71,78 +71,30 @@ def test(system_data_path,mode,date,model,data,criterion,workers=4,batch=8,facto
     # os.makedirs('./images/'+date+'/'+which_data,exist_ok =True)
     os.makedirs(f'./csv_files/{date}/{mode}/{data}/{exp_id}',exist_ok =True)
 
-    model.eval()
-    with tqdm(range(len(testloader))) as pbar:
-        for i, data in zip(pbar, testloader):
-            with torch.no_grad():
-                torch.cuda.empty_cache()
-                err = 0
-                image = data['input'].to(device)
-                output = model.forward(image)
-                if(model_name =='unet_synth_tum'):
-                    output = torch.sigmoid(output[:,2:,:,:,:])
-                output_wothresh = output
-                output = output>thresh
-
-                if(no_crop):
-                    label = data['orig'].cpu().numpy().squeeze()
-                    pred = output.cpu().numpy().squeeze()
-                else:
-                    image,pred,pred_wothresh,label = helper_resize(image,output,output_wothresh,data['orig'],shape=data['shape'],crop_para=data['crop_para'])
-                                
-                dice = Dice_Score(pred,label)
-                hau_acc = Hausdorff_score(pred,label)
-                tpr_acc = TPR(pred,label)
-                tnr_acc = TNR(pred,label)
-                
-                pbar.set_postfix(
-                                Test_dice =  np.round(dice, 5), 
-                                Test_hau_acc = np.round(hau_acc, 5),Test_TPR= np.round(tpr_acc, 5),Test_TNR= np.round(tnr_acc, 5),)
-                pbar.update(0)
-                # if('affine' not in data.keys()):
-                #     save_image(i,image,pred,pred_wothresh,label,None,np.round(dice, 2),which_data,mode,exp_id,date)
-                # else:
-                #     save_image(i,image,pred,pred_wothresh,label,data['affine'][0],np.round(dice, 2),which_data,mode,exp_id,date)
-
-                test_dice += dice.item()
-                test_hau_acc += hau_acc.item()
-                test_tpr_acc += tpr_acc.item()
-                test_tnr_acc += tnr_acc.item()
-                dice_list.append(dice.item())
-                hau_list.append(hau_acc.item())
-                tpr_list.append(tpr_acc.item())
-                tnr_list.append(tnr_acc.item())
-
-                del image
-                del label
-                del err
-    print(f'Dice {np.round(np.mean(dice_list),5)}({np.round(np.std(dice_list),5)})',
-          f'Hausdorff {np.round(np.mean(hau_list),5)}({np.round(np.std(hau_list),5)})',
-          f'TPR {np.round(np.mean(tpr_list),5)}({np.round(np.std(tpr_list),5)})',
-          f'TNR {np.round(np.mean(tnr_list),5)}({np.round(np.std(tnr_list),5)})')
-    pd.DataFrame({'Dice':dice_list,'Hausdorff':hau_list,'TPR':tpr_list,'TNR':tnr_list,}).to_csv(f'./csv_files/{date}/{mode}/{which_data}/{exp_id}/'+model_name+'_'+which_data+'_'+mode+'_'+exp_id+'_'+date+'_'+str(pretrained)+str(thresh)+'.csv')
-
-    
-    if(optthresh):
-        dice_thresholds=[]
-        thresholds = list(np.arange(0.1,0.99,0.1))
-        for thresh in thresholds:
-            dice_list = []
-            hau_list = []
-            tpr_list = []
-            tnr_list = []
-            test_dice = 0
-            test_hau_acc = 0
-            test_tpr_acc = 0
-            test_tnr_acc = 0
+    model.eval()    
+    dice_drops=[]
+    drops = np.arange(10)
+    thresh=0.5
+    for drop_iter in drops:
+        dice_list = []
+        hau_list = []
+        tpr_list = []
+        tnr_list = []
+        test_dice = 0
+        test_hau_acc = 0
+        test_tpr_acc = 0
+        test_tnr_acc = 0
+        with tqdm(range(len(testloader))) as pbar:
             for i, data in zip(pbar, testloader):
                 with torch.no_grad():
                     torch.cuda.empty_cache()
                     err = 0
                     image = data['input'].to(device)
                     output = model.forward(image)
+                    output_wothresh = output
                     if(model_name =='unet_synth_tum'):
                         output = torch.sigmoid(output[:,2:,:,:,:])
+
                     output = output>thresh
                     # image,pred,label = helper_resize(image,output,data['orig'],shape=data['shape'],crop_para=data['crop_para'])
                     if(no_crop):
@@ -173,20 +125,19 @@ def test(system_data_path,mode,date,model,data,criterion,workers=4,batch=8,facto
                     del image
                     del label
                     del err
-            dice_thresholds.append(np.round(np.mean(dice_list),5))
+            dice_drops.append(np.round(np.mean(dice_list),5))
             print(f'For threshold {thresh} ',f'Dice {np.round(np.mean(dice_list),5)}({np.round(np.std(dice_list),5)})',
-          f'Hausdorff {np.round(np.mean(hau_list),5)}({np.round(np.std(hau_list),5)})',
-          f'TPR {np.round(np.mean(tpr_list),5)}({np.round(np.std(tpr_list),5)})',
-          f'TNR {np.round(np.mean(tnr_list),5)}({np.round(np.std(tnr_list),5)})')
-            pd.DataFrame({'Dice':dice_list,'Hausdorff':hau_list,'TPR':tpr_list,'TNR':tnr_list,}).to_csv(f'./csv_files/{date}/{mode}/{which_data}/{exp_id}/'+model_name+'_'+which_data+'_'+mode+'_'+exp_id+'_'+date+'_'+str(pretrained)+'_thresh_'+str(thresh)+'.csv')
-        print('Best Threshold was {}'.format(thresholds[np.argmax(dice_thresholds)]))
+            f'Hausdorff {np.round(np.mean(hau_list),5)}({np.round(np.std(hau_list),5)})',
+            f'TPR {np.round(np.mean(tpr_list),5)}({np.round(np.std(tpr_list),5)})',
+            f'TNR {np.round(np.mean(tnr_list),5)}({np.round(np.std(tnr_list),5)})')
+            pd.DataFrame({'Dice':dice_list,'Hausdorff':hau_list,'TPR':tpr_list,'TNR':tnr_list,}).to_csv(f'./csv_files/{date}/{mode}/{which_data}/{exp_id}/'+model_name+'_'+which_data+'_'+mode+'_'+exp_id+'_'+date+'_'+str(pretrained)+'_drop_iter_'+str(drop_iter)+'.csv')
 
 if(__name__ =="__main__"):
     parser = argparse.ArgumentParser()
     parser.add_argument("-mode",default='S',choices=['S','SS','SSDA','DA','FT','PT','FTDA','FTSS','FPI'],
                         help="mode to run the model in")
     parser.add_argument("-data",default='brats',choices=['texshapes','randomshapes','spheres','combinedv2','combinedv1','wmh','brats','busi','lits','idrid'],help='Which data to run on?')
-    parser.add_argument("-model",default='unet', choices=['unet_dropout','unet_synth_tum','unet','slimunetr','ducknet','saunet','nestedunet','halfunet','resunet','unetr','sacunet'],help='Which model to run ?')
+    parser.add_argument("-model",default='unet', choices=['nestedunet_dropout','unet_synth_tum','unet','slimunetr','ducknet','saunet','nestedunet','halfunet','resunet','unetr','sacunet'],help='Which model to run ?')
     parser.add_argument("-loss",dest='criterion',default='focal + dice',choices=['dicece','dice','focal + dice'],help='Which loss to choose?')
     parser.add_argument("-workers",default=4,type=int)
     parser.add_argument("-device",default=0,type=int,choices=[0,1])

@@ -8,9 +8,12 @@ from scipy.ndimage import gaussian_filter
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from scipy import ndimage
+import scipy as sc
+from scipy.stats import rice
+from scipy.ndimage import gaussian_filter
 
 class BackgroundGeneration3D(Dataset):
-    def __init__(self, type_of_imgs='nifty',have_texture=True,have_noise=True, have_smoothing=True, have_small=True, have_edema=True, return_param=True, transform=None, dark=True, which_data='wmh',perturb=False, size=(128,128,128),semi_axis_range=[(5,10)],centroid_scale=10,num_lesions=5,range_sampling=[1],num_ellipses=15):
+    def __init__(self, type_of_imgs='nifty',have_texture=True,have_noise=True, have_smoothing=True, have_small=True, have_edema=True, return_param=True, transform=None, dark=True, which_data='wmh',perturb=False, size=(128,128,128),semi_axis_range=[(5,10)],centroid_scale=10,num_lesions=5,range_sampling=[1],num_ellipses=15,use_rician=False):
 
         self.transform = transform
         self.size = size
@@ -28,7 +31,7 @@ class BackgroundGeneration3D(Dataset):
         self.centroid_scaling = centroid_scale
         self.range_sampling = range_sampling
         self.num_ellipses = num_ellipses        
-
+        self.use_rician = use_rician
 
         
     def ellipsoid(self,coord=(1,2,1),semi_a = 4, semi_b = 34, semi_c = 34, alpha=np.pi/4, beta=np.pi/4, gamma=np.pi/4,img_dim=(128,128,128)):
@@ -78,9 +81,13 @@ class BackgroundGeneration3D(Dataset):
         
     def gaussian_noise(self, sigma=1.0,size=None, range_min=-0.3, range_max=1.0):
         noise = np.random.random(self.size)
+        if(self.use_rician):
+            img = np.ones(size)
+            noise = rice.rvs(img,scale=1)
         # gaussian_noise = gaussian_filter(noise,sigma) + 0.5*gaussian_filter(noise,sigma/2) + 0.25*gaussian_filter(noise,sigma/4) #+ 0.125*gaussian_filter(noise,sigma/8) + 0.0625*gaussian_filter(noise,sigma/16)
         gaussian_noise = 1 + 0.1*gaussian_filter(noise,sigma) # 0.4 - 0.6 MR Background
- 
+
+
         # noise = np.random.random(self.size)
         # gaussian_noise2 = gaussian_filter(noise,sigma) #+ 0.5*gaussian_filter(noise,sigma/4) + 0.25*gaussian_filter(noise,sigma/8) + 0.125*gaussian_filter(noise,sigma/16)
         # gaussian_noise2 -= gaussian_noise2.min()

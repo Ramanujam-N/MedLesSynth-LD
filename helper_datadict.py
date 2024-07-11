@@ -9,7 +9,7 @@ from ImageLoader.CutPaste3D import CutPaste3D
 from ImageLoader.CutPaste2D import CutPaste2D
 
 from ModelArchitecture.DUCK_Net import DuckNet,DuckNet_smaller
-from ModelArchitecture.UNet import NestedUNet,UNet,HalfUNet,ResUNet,SA_UNet,SAC_UNet
+from ModelArchitecture.UNet import NestedUNet,UNet,HalfUNet,ResUNet,SA_UNet,SAC_UNet,NestedUNetDropout
 from ModelArchitecture.UNet2D import NestedUNet2D,UNet2D,HalfUNet2D,ResUNet2D,SA_UNet2D,SAC_UNet2D
 from ModelArchitecture.UNETR import VITForSegmentation
 from ModelArchitecture.UNETR2D import VITForSegmentation2D
@@ -776,9 +776,10 @@ def helper_data_augmentation(system_data_path,which_data='brats',factor=1.0,scal
                 else:            
                     new_train_names_flair.append(train_names_flair[i]) 
                     new_train_names_seg.append(train_names_seg[i])
-        train_names_flair = new_train_names_flair
-        train_names_seg = new_train_names_seg
-
+        if(len(train_names_json)):
+            train_names_flair = new_train_names_flair
+            train_names_seg = new_train_names_seg
+                    
         val_names_flair = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*image.png')))[:val_size]
         val_names_seg = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*mask.png')))[:val_size]
         val_names_json = sorted(glob.glob((sim_path+'/'+which_data+'/ValSet/*.json')))[:val_size]
@@ -794,8 +795,10 @@ def helper_data_augmentation(system_data_path,which_data='brats',factor=1.0,scal
                 else:
                     new_val_names_flair.append(val_names_flair[i])
                     new_val_names_seg.append(val_names_seg[i])
-        val_names_flair = new_val_names_flair
-        val_names_seg = new_val_names_seg
+        if(len(val_names_json)):
+            val_names_flair = new_val_names_flair
+            val_names_seg = new_val_names_seg
+        
         
         datadict_train = ImageLoader2D(train_names_flair,train_names_seg,image_size=(512,512),type_of_imgs='png',transform = composed_transform_2d,data='busi')
         datadict_val = ImageLoader2D(val_names_flair,val_names_seg,image_size=(512,512),type_of_imgs='png', transform = ToTensor2D(True),data='busi')
@@ -977,7 +980,12 @@ def helper_model(model_type,which_data,hyper_parameters,device=0,size=(128,128,1
         model = NestedUNet(out_channels=1,**hyper_parameters).to(device)
         if(which_data=='busi' or which_data=='idrid'):
             model = NestedUNet2D(out_channels=1,**hyper_parameters).to(device)
-            
+
+    elif(model_type == 'nestedunet_dropout'):
+        model = NestedUNetDropout(out_channels=1,**hyper_parameters).to(device)
+        if(which_data=='busi' or which_data=='idrid'):
+            model = NestedUNet2D(out_channels=1,**hyper_parameters).to(device)
+   
     elif(model_type == 'halfunet'):
         model = HalfUNet(out_channels=1).to(device)
         if(which_data=='busi' or which_data=='idrid'):
