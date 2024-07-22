@@ -72,69 +72,8 @@ def test(system_data_path,mode,date,model,data,criterion,workers=4,batch=8,facto
     os.makedirs(f'./csv_files/{date}/{mode}/{data}/{exp_id}',exist_ok =True)
 
     model.eval()
-    with tqdm(range(len(testloader))) as pbar:
-        for i, data in zip(pbar, testloader):
-            with torch.no_grad():
-                torch.cuda.empty_cache()
-                err = 0
-                image = data['input'].to(device)
-                output = model.forward(image)
-                if(model_name =='unet_synth_tum'):
-                    output = torch.sigmoid(output[:,2:,:,:,:])
-                output_wothresh = output
-                output = output>thresh
-
-                if(no_crop):
-                    label = data['orig'].cpu().numpy().squeeze()
-                    pred = output.cpu().numpy().squeeze()
-                else:
-                    image,pred,pred_wothresh,label = helper_resize(image,output,output_wothresh,data['orig'],shape=data['shape'],crop_para=data['crop_para'])
-                                
-                dice = Dice_Score(pred,label)
-                hau_acc = Hausdorff_score(pred,label)
-                tpr_acc = TPR(pred,label)
-                tnr_acc = TNR(pred,label)
-                
-                pbar.set_postfix(
-                                Test_dice =  np.round(dice, 5), 
-                                Test_hau_acc = np.round(hau_acc, 5),Test_TPR= np.round(tpr_acc, 5),Test_TNR= np.round(tnr_acc, 5),)
-                pbar.update(0)
-                # if('affine' not in data.keys()):
-                #     save_image(i,image,pred,pred_wothresh,label,None,np.round(dice, 2),which_data,mode,exp_id,date)
-                # else:
-                #     save_image(i,image,pred,pred_wothresh,label,data['affine'][0],np.round(dice, 2),which_data,mode,exp_id,date)
-
-                test_dice += dice.item()
-                test_hau_acc += hau_acc.item()
-                test_tpr_acc += tpr_acc.item()
-                test_tnr_acc += tnr_acc.item()
-                dice_list.append(dice.item())
-                hau_list.append(hau_acc.item())
-                tpr_list.append(tpr_acc.item())
-                tnr_list.append(tnr_acc.item())
-
-                del image
-                del label
-                del err
-    print(f'Dice {np.round(np.mean(dice_list),5)}({np.round(np.std(dice_list),5)})',
-          f'Hausdorff {np.round(np.mean(hau_list),5)}({np.round(np.std(hau_list),5)})',
-          f'TPR {np.round(np.mean(tpr_list),5)}({np.round(np.std(tpr_list),5)})',
-          f'TNR {np.round(np.mean(tnr_list),5)}({np.round(np.std(tnr_list),5)})')
-    pd.DataFrame({'Dice':dice_list,'Hausdorff':hau_list,'TPR':tpr_list,'TNR':tnr_list,}).to_csv(f'./csv_files/{date}/{mode}/{which_data}/{exp_id}/'+model_name+'_'+which_data+'_'+mode+'_'+exp_id+'_'+date+'_'+str(pretrained)+str(thresh)+'.csv')
-
-    
-    if(optthresh):
-        dice_thresholds=[]
-        thresholds = list(np.arange(0.1,0.99,0.1))
-        for thresh in thresholds:
-            dice_list = []
-            hau_list = []
-            tpr_list = []
-            tnr_list = []
-            test_dice = 0
-            test_hau_acc = 0
-            test_tpr_acc = 0
-            test_tnr_acc = 0
+    if(optthresh==False):
+        with tqdm(range(len(testloader))) as pbar:
             for i, data in zip(pbar, testloader):
                 with torch.no_grad():
                     torch.cuda.empty_cache()
@@ -143,24 +82,29 @@ def test(system_data_path,mode,date,model,data,criterion,workers=4,batch=8,facto
                     output = model.forward(image)
                     if(model_name =='unet_synth_tum'):
                         output = torch.sigmoid(output[:,2:,:,:,:])
+                    output_wothresh = output
                     output = output>thresh
-                    # image,pred,label = helper_resize(image,output,data['orig'],shape=data['shape'],crop_para=data['crop_para'])
+
                     if(no_crop):
                         label = data['orig'].cpu().numpy().squeeze()
                         pred = output.cpu().numpy().squeeze()
                     else:
                         image,pred,pred_wothresh,label = helper_resize(image,output,output_wothresh,data['orig'],shape=data['shape'],crop_para=data['crop_para'])
-                    
-
-                    dice = Dice_Score(pred,label,threshold=thresh)
-                    hau_acc = Hausdorff_score(pred,label,threshold=thresh)
-                    tpr_acc = TPR(pred,label,threshold=thresh)
-                    tnr_acc = TNR(pred,label,threshold=thresh)
+                                    
+                    dice = Dice_Score(pred,label)
+                    hau_acc = Hausdorff_score(pred,label)
+                    tpr_acc = TPR(pred,label)
+                    tnr_acc = TNR(pred,label)
                     
                     pbar.set_postfix(
                                     Test_dice =  np.round(dice, 5), 
                                     Test_hau_acc = np.round(hau_acc, 5),Test_TPR= np.round(tpr_acc, 5),Test_TNR= np.round(tnr_acc, 5),)
                     pbar.update(0)
+                    if('affine' not in data.keys()):
+                        save_image(i,image,pred,pred_wothresh,label,None,np.round(dice, 2),which_data,mode,exp_id,date)
+                    else:
+                        save_image(i,image,pred,pred_wothresh,label,data['affine'][0],np.round(dice, 2),which_data,mode,exp_id,date)
+
                     test_dice += dice.item()
                     test_hau_acc += hau_acc.item()
                     test_tpr_acc += tpr_acc.item()
@@ -173,12 +117,79 @@ def test(system_data_path,mode,date,model,data,criterion,workers=4,batch=8,facto
                     del image
                     del label
                     del err
-            dice_thresholds.append(np.round(np.mean(dice_list),5))
-            print(f'For threshold {thresh} ',f'Dice {np.round(np.mean(dice_list),5)}({np.round(np.std(dice_list),5)})',
-          f'Hausdorff {np.round(np.mean(hau_list),5)}({np.round(np.std(hau_list),5)})',
-          f'TPR {np.round(np.mean(tpr_list),5)}({np.round(np.std(tpr_list),5)})',
-          f'TNR {np.round(np.mean(tnr_list),5)}({np.round(np.std(tnr_list),5)})')
-            pd.DataFrame({'Dice':dice_list,'Hausdorff':hau_list,'TPR':tpr_list,'TNR':tnr_list,}).to_csv(f'./csv_files/{date}/{mode}/{which_data}/{exp_id}/'+model_name+'_'+which_data+'_'+mode+'_'+exp_id+'_'+date+'_'+str(pretrained)+'_thresh_'+str(thresh)+'.csv')
+        print(f'Dice {np.round(np.mean(dice_list),5)}({np.round(np.std(dice_list),5)})',
+            f'Hausdorff {np.round(np.mean(hau_list),5)}({np.round(np.std(hau_list),5)})',
+            f'TPR {np.round(np.mean(tpr_list),5)}({np.round(np.std(tpr_list),5)})',
+            f'TNR {np.round(np.mean(tnr_list),5)}({np.round(np.std(tnr_list),5)})')
+        pd.DataFrame({'Dice':dice_list,'Hausdorff':hau_list,'TPR':tpr_list,'TNR':tnr_list,}).to_csv(f'./csv_files/{date}/{mode}/{which_data}/{exp_id}/'+model_name+'_'+which_data+'_'+mode+'_'+exp_id+'_'+date+'_'+str(pretrained)+str(thresh)+'.csv')
+
+    
+    else:
+        dice_thresholds=[]
+        thresholds = list(np.arange(0,1.1,0.1))
+        dice_list = {}
+        hau_list = {}
+        tpr_list = {}
+        tnr_list = {}
+        for i in range(4):
+            dice_list = {str(thresh):[] for thresh in thresholds}
+            hau_list = {str(thresh):[] for thresh in thresholds}
+            tpr_list = {str(thresh):[] for thresh in thresholds}
+            tnr_list = {str(thresh):[] for thresh in thresholds}
+
+            test_dice = {str(thresh):0 for thresh in thresholds}
+            test_hau_acc = {str(thresh):0 for thresh in thresholds}
+            test_tpr_acc = {str(thresh):0 for thresh in thresholds}
+            test_tnr_acc = {str(thresh):0 for thresh in thresholds}
+        with tqdm(range(len(testloader))) as pbar:
+            for i, data in zip(pbar, testloader):
+                with torch.no_grad():
+                    torch.cuda.empty_cache()
+                    err = 0
+                    image = data['input'].to(device)
+                    output = model.forward(image)
+                    output_wothresh = output
+                    if(model_name =='unet_synth_tum'):
+                        output = torch.sigmoid(output[:,2:,:,:,:])
+                    for thresh in thresholds:
+                        output = output_wothresh>thresh
+                        # image,pred,label = helper_resize(image,output,data['orig'],shape=data['shape'],crop_para=data['crop_para'])
+                        if(no_crop):
+                            label = data['orig'].cpu().numpy().squeeze()
+                            pred = output.cpu().numpy().squeeze()
+                        else:
+                            image_cpu,pred,pred_wothresh,label = helper_resize(image,output,output_wothresh,data['orig'],shape=data['shape'],crop_para=data['crop_para'])
+                        
+
+                        dice = Dice_Score(pred,label,threshold=thresh)
+                        hau_acc = Hausdorff_score(pred,label,threshold=thresh)
+                        tpr_acc = TPR(pred,label,threshold=thresh)
+                        tnr_acc = TNR(pred,label,threshold=thresh)
+                        
+                        pbar.set_postfix(Thresh=thresh,
+                                        Test_dice =  np.round(dice, 5), 
+                                        Test_hau_acc = np.round(hau_acc, 5),Test_TPR= np.round(tpr_acc, 5),Test_TNR= np.round(tnr_acc, 5),)
+                        pbar.update(0)
+                        test_dice[str(thresh)] += dice.item()
+                        test_hau_acc[str(thresh)] += hau_acc.item()
+                        test_tpr_acc[str(thresh)] += tpr_acc.item()
+                        test_tnr_acc[str(thresh)] += tnr_acc.item()
+                        dice_list[str(thresh)].append(dice.item())
+                        hau_list[str(thresh)].append(hau_acc.item())
+                        tpr_list[str(thresh)].append(tpr_acc.item())
+                        tnr_list[str(thresh)].append(tnr_acc.item())
+
+                    del image
+                    del image_cpu
+                    del label
+                    del err
+        for i in range(len(thresholds)):
+            dice_thresholds.append(np.round(np.mean(dice_list[str(thresh)]),5))
+            print(f'For threshold {thresh} ',f'Dice {np.round(np.mean(dice_list[str(thresh)]),5)}({np.round(np.std(dice_list[str(thresh)]),5)})',
+            f'Hausdorff {np.round(np.mean(hau_list[str(thresh)]),5)}({np.round(np.std(hau_list[str(thresh)]),5)})',
+            f'TPR {np.round(np.mean(tpr_list[str(thresh)]),5)}({np.round(np.std(tpr_list[str(thresh)]),5)})',
+            f'TNR {np.round(np.mean(tnr_list[str(thresh)]),5)}({np.round(np.std(tnr_list[str(thresh)]),5)})')
+            pd.DataFrame({'Dice':dice_list[str(thresh)],'Hausdorff':hau_list[str(thresh)],'TPR':tpr_list[str(thresh)],'TNR':tnr_list[str(thresh)],}).to_csv(f'./csv_files/{date}/{mode}/{which_data}/{exp_id}/'+model_name+'_'+which_data+'_'+mode+'_'+exp_id+'_'+date+'_'+str(pretrained)+'_thresh_'+str(thresh)+'.csv')
         print('Best Threshold was {}'.format(thresholds[np.argmax(dice_thresholds)]))
 
 if(__name__ =="__main__"):

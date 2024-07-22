@@ -61,7 +61,7 @@ def helper_resize(image,output,output_wothresh,label,shape=(),crop_para=[]):
     output_wothresh = output_wothresh.cpu().numpy().squeeze()
     label=label.cpu().numpy().squeeze()
     if(len(label.shape)<=2):
-        return skimage.transform.resize(image, output_shape = label.shape,order=1,preserve_range=True),skimage.transform.resize(output_wothresh, output_shape = label.shape,order=1,preserve_range=True),skimage.transform.resize(output, output_shape = label.shape,order=0,preserve_range=True),label
+        return skimage.transform.resize(image, output_shape = label.shape,order=1,preserve_range=True),skimage.transform.resize(output, output_shape = label.shape,order=0,preserve_range=True),skimage.transform.resize(output_wothresh, output_shape = label.shape,order=1,preserve_range=True),label
     
     shape = (int(shape[0]),int(shape[1]),int(shape[2]))
     #print(shape,label.shape)
