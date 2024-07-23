@@ -194,10 +194,10 @@ def test(system_data_path,mode,date,model,data,criterion,workers=4,batch=8,facto
 
 if(__name__ =="__main__"):
     parser = argparse.ArgumentParser()
-    parser.add_argument("-mode",default='S',choices=['S','SS','SSDA','DA','FT','PT','FTDA','FTSS','FPI'],
+    parser.add_argument("-mode",default='S',choices=['S','SS','SSDA','DA','FT','PT','FTDA','FTSS'],
                         help="mode to run the model in")
-    parser.add_argument("-data",default='brats',choices=['texshapes','randomshapes','spheres','combinedv2','combinedv1','wmh','brats','busi','lits','idrid'],help='Which data to run on?')
-    parser.add_argument("-model",default='unet', choices=['unet_dropout','unet_synth_tum','unet','slimunetr','ducknet','saunet','nestedunet','halfunet','resunet','unetr','sacunet'],help='Which model to run ?')
+    parser.add_argument("-data",default='brats',choices=['wmh','brats','busi','lits','idrid'],help='Which data to run on?')
+    parser.add_argument("-model",default='unet', choices=['unet','slimunetr','nestedunet','halfunet','resunet','unetr'],help='Which model to run ?')
     parser.add_argument("-loss",dest='criterion',default='focal + dice',choices=['dicece','dice','focal + dice'],help='Which loss to choose?')
     parser.add_argument("-workers",default=4,type=int)
     parser.add_argument("-device",default=0,type=int,choices=[0,1])
@@ -218,9 +218,9 @@ if(__name__ =="__main__"):
     parser.add_argument("-thresh",default=0.5,type=float,)
     args = parser.parse_args()
 
-    mode_dir = {'FPI':'FPI','S':'Supervised','SS':'Self_Supervised','SSDA':'Self_Supervised_Data_Adaptation','SSDA_v2':'Self_Supervised_Data_Adaptation_v2','DA':'Data_Augmentation','FT':'Fine_Tuning','PT':'Pre_Training','FTDA':'Fine_Tuning_Data_Augmentation','FTSS':'Fine_Tuning_Self_Supervised'}
+    mode_dir = {'S':'Supervised','SS':'Self_Supervised','SSDA':'Self_Supervised_Data_Adaptation','SSDA_v2':'Self_Supervised_Data_Adaptation_v2','DA':'Data_Augmentation','FT':'Fine_Tuning','PT':'Pre_Training','FTDA':'Fine_Tuning_Data_Augmentation','FTSS':'Fine_Tuning_Self_Supervised'}
     args.mode = mode_dir[args.mode]
-    data_addresses = {63:'/mnt/d1bdf387-8fd2-4f57-8c8a-eba9ef0baff6',64:'/mnt/70b9cd2d-ce8a-4b10-bb6d-96ae6a51130a',65:'/mnt/b0305b0a-824d-48cb-a829-2a6766e6b45b',112:'/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f',131:'/mnt/a4ef64ea-1b6b-4423-b1d2-4794d2e97289'}
+    data_addresses = {112:'/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f'}
     args.system_data_path = data_addresses[args.system_data_path]
 
     print("-----------------------------Arguments for the current execution-----------------------------------")

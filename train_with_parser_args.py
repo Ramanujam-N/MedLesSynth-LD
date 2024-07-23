@@ -130,8 +130,8 @@ if(__name__ =="__main__"):
     parser = argparse.ArgumentParser()
     parser.add_argument("-mode",default='S',choices=['S','SS','SSDA','DA','FT','PT','FTDA','FTSS','FPI','CutPaste'],
                         help="mode to run the model in")
-    parser.add_argument("-data",default='brats',choices=['idrid','texshapes','randomshapes','spheres','combinedv1','wmh','brats','busi','lits',],help='Which data to run on?')
-    parser.add_argument("-model",default='unet', choices=['unet','slimunetr','ducknet','saunet','nestedunet','halfunet','resunet','unetr','sacunet'],help='Which model to run ?')
+    parser.add_argument("-data",default='brats',choices=['wmh','brats','busi','lits',],help='Which data to run on?')
+    parser.add_argument("-model",default='unet', choices=['unet','slimunetr','nestedunet','halfunet','resunet','unetr'],help='Which model to run ?')
     parser.add_argument("-loss",dest='criterion',default='focal + dice',choices=['dice','focal + dice'],help='Which loss to choose?')
     parser.add_argument("-workers",default=4,type=int)
     parser.add_argument("-device",default=0,type=int,choices=[0,1])
@@ -151,7 +151,7 @@ if(__name__ =="__main__"):
     args = parser.parse_args()
 
     mode_dir = {'S':'Supervised','SS':'Self_Supervised','SSDA':'Self_Supervised_Data_Adaptation','SSDA_v2':'Self_Supervised_Data_Adaptation_v2','DA':'Data_Augmentation','FT':'Fine_Tuning','PT':'Pre_Training','FTDA':'Fine_Tuning_Data_Augmentation','FTSS':'Fine_Tuning_Self_Supervised','FPI':'FPI','CutPaste':'CutPaste'}
-    data_addresses = {63:'/mnt/d1bdf387-8fd2-4f57-8c8a-eba9ef0baff6',64:'/mnt/70b9cd2d-ce8a-4b10-bb6d-96ae6a51130a',112:'/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f',}
+    data_addresses = {112:'/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f'}
     args.system_data_path = data_addresses[args.system_data_path]
     args.mode = mode_dir[args.mode]
     
