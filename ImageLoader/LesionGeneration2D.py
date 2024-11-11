@@ -69,7 +69,7 @@ class LesionGeneration2D(Dataset):
 
                 return label_sim
         
-    def ellipsoid(self,coord=(1,2),semi_a = 4, semi_b = 34, alpha=np.pi/4, beta=np.pi/4,img_dim=(128,128)):
+    def create_ellipsoid(self,coord=(1,2),semi_a = 4, semi_b = 34, alpha=np.pi/4, beta=np.pi/4,img_dim=(128,128)):
         x = np.linspace(-img_dim[0]//2,np.ceil(img_dim[0]//2),img_dim[0])
         y = np.linspace(-img_dim[1]//2,np.ceil(img_dim[1]//2),img_dim[1])
  
@@ -122,7 +122,7 @@ class LesionGeneration2D(Dataset):
         tex_noise = 5*np.ones_like(tex_noise)*tex_noise
         return tex_noise
     
-    def shape_generation(self,scale_centroids,centroid_main,num_ellipses,semi_axes_range,perturb_sigma=[1,1],image_mask=1):
+    def localise_pert(self,scale_centroids,centroid_main,num_ellipses,semi_axes_range,perturb_sigma=[1,1],image_mask=1):
         # For the number of ellipsoids generate centroids in the local cloud
         random_centroids = centroid_main.T + (np.random.random((num_ellipses,2))*scale_centroids)
 
@@ -145,7 +145,7 @@ class LesionGeneration2D(Dataset):
         
         out = []
         for i in range(num_ellipses):
-            out.append(self.ellipsoid(random_centroids[i],*random_semi_axes[i],*random_rot_angles[i],img_dim=self.size) )
+            out.append(self.create_ellipsoid(random_centroids[i],*random_semi_axes[i],*random_rot_angles[i],img_dim=self.size) )
 
         out = np.logical_or.reduce(out)*image_mask
 
@@ -180,6 +180,72 @@ class LesionGeneration2D(Dataset):
         
         # return final_region,1
         return out,1
+
+    def intensity_blend(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image,output_image):
+        if(self.have_smoothing and semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
+
+            if(self.have_edema):
+                tex_noise_edema = self.create_pert(tex_sigma_edema,self.size,range_min,range_max)
+
+                smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
+                smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
+            else:
+                # smoothed_les = gaussian_filter(out*(tex_noise+output_image), sigma=smoothing_mask)
+                smoothed_les = out*(tex_noise*image)
+                if(self.have_texture):
+                    smoothed_out = output_image #+ 0.5*inter_image, sigma=smoothing_image)
+                else:
+                    smoothed_out = output_image
+
+            smoothed_out-=smoothed_out.min()
+            smoothed_out/=smoothed_out.max()
+
+            if(self.which_data=='busi'):
+                image1 = alpha*output_image*(1-out) - beta*smoothed_les
+                image2 = alpha*smoothed_out - beta*smoothed_les
+                
+                
+            else:
+                image1 = alpha*output_image + smoothed_les
+                image2 = alpha*smoothed_out + smoothed_les
+
+            if(self.have_edema):
+                output_mask = np.logical_or(output_mask,out_edema)
+                image1[out_edema>0]=image2[out_edema>0]
+            else:
+                image1[out>0]=image2[out>0]
+
+            image1[image1<0] = 0
+            # image1[out>0] = ndimage.grey_erosion(image1*(out>0),structure = np.ones((1,5)))[out>0]
+            dilated_out = ndimage.binary_dilation(out>0,structure=np.ones((4,4)))
+            image1[dilated_out>0] = gaussian_filter(image1[dilated_out>0],sigma=3)
+            
+        
+        if(self.have_smoothing and semi_axes_range==(2,5) or semi_axes_range==(3,5)):
+            # smoothed_les = gaussian_filter(out*(tex_noise+output_image), sigma=smoothing_mask)
+            smoothed_les = out*(tex_noise*image)
+            if(not self.have_texture):
+                smoothed_out = output_image
+            else:
+                smoothed_out = output_image
+            
+            if(self.which_data=='busi'):
+                image1 = alpha*output_image*(1-out) - beta*smoothed_les
+                image2 = alpha*smoothed_out - beta*smoothed_les
+
+            elif(np.random.choice([0,1])*self.dark):
+                image1 = alpha*output_image - beta*smoothed_les
+                image2 = alpha*smoothed_out - beta*smoothed_les
+            else:
+                image1 = alpha*output_image + beta*smoothed_les
+                image2 = alpha*smoothed_out + beta*smoothed_les
+            
+            image1[out>0]=image2[out>0]
+            image1[image1<0] = 0
+            # image1[out>0] = ndimage.grey_erosion(image1*(out>0),structure = np.ones((1,5)))[out>0]
+            dilated_out = ndimage.binary_dilation(out>0,structure=np.ones((10,10)))
+            image1[dilated_out>0] = gaussian_filter(image1[dilated_out>0],sigma=3)
+        return image1
 
     def simulation(self,image,inter_image,image_mask,num_lesions=3,gt_mask=None):
         param_dict = {}
@@ -234,12 +300,12 @@ class LesionGeneration2D(Dataset):
                 small_sigma = np.random.uniform(1,2)
                 out = self.gaussian_small_shapes(image_mask,small_sigma)
             else:   
-                out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask) 
+                out,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask) 
                 while(shape_status==-1):
                     print(shape_status)
                     random_coord_index = np.random.choice(len(x_corr),1)
                     centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index]])
-                    out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
+                    out,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
                 
             if(semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
                 semi_axes_range_edema = (semi_axes_range[0]+5,semi_axes_range[1]+5)
@@ -247,83 +313,21 @@ class LesionGeneration2D(Dataset):
                 beta = 1-alpha
 
                 gamma = np.random.uniform(0.5,0.7)
-                out_edema,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
+                out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
                 while(shape_status==-1):
                     print(shape_status)
                     random_coord_index = np.random.choice(len(x_corr),1)
                     centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index]])
-                    out_edema,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
+                    out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
 
             output_mask = np.logical_or(output_mask,out)
 
             if(self.have_noise and semi_axes_range !=(2,5)):
-                tex_noise = self.gaussian_noise(tex_sigma,self.size,range_min,range_max)
+                tex_noise = self.create_pert(tex_sigma,self.size,range_min,range_max)
             else:
                 tex_noise = 1.0
             
-            if(self.have_smoothing and semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
-
-                if(self.have_edema):
-                    tex_noise_edema = self.gaussian_noise(tex_sigma_edema,self.size,range_min,range_max)
-
-                    smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
-                    smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-                else:
-                    # smoothed_les = gaussian_filter(out*(tex_noise+output_image), sigma=smoothing_mask)
-                    smoothed_les = out*(tex_noise*image)
-                    if(self.have_texture):
-                        smoothed_out = output_image #+ 0.5*inter_image, sigma=smoothing_image)
-                    else:
-                        smoothed_out = output_image
-
-                smoothed_out-=smoothed_out.min()
-                smoothed_out/=smoothed_out.max()
-
-                if(self.which_data=='busi'):
-                    image1 = alpha*output_image*(1-out) - beta*smoothed_les
-                    image2 = alpha*smoothed_out - beta*smoothed_les
-                    
-                    
-                else:
-                    image1 = alpha*output_image + smoothed_les
-                    image2 = alpha*smoothed_out + smoothed_les
-
-                if(self.have_edema):
-                    output_mask = np.logical_or(output_mask,out_edema)
-                    image1[out_edema>0]=image2[out_edema>0]
-                else:
-                    image1[out>0]=image2[out>0]
-
-                image1[image1<0] = 0
-                # image1[out>0] = ndimage.grey_erosion(image1*(out>0),structure = np.ones((1,5)))[out>0]
-                dilated_out = ndimage.binary_dilation(out>0,structure=np.ones((4,4)))
-                image1[dilated_out>0] = gaussian_filter(image1[dilated_out>0],sigma=3)
-                
-            
-            if(self.have_smoothing and semi_axes_range==(2,5) or semi_axes_range==(3,5)):
-                # smoothed_les = gaussian_filter(out*(tex_noise+output_image), sigma=smoothing_mask)
-                smoothed_les = out*(tex_noise*image)
-                if(not self.have_texture):
-                    smoothed_out = output_image
-                else:
-                    smoothed_out = output_image
-                
-                if(self.which_data=='busi'):
-                    image1 = alpha*output_image*(1-out) - beta*smoothed_les
-                    image2 = alpha*smoothed_out - beta*smoothed_les
-
-                elif(np.random.choice([0,1])*self.dark):
-                    image1 = alpha*output_image - beta*smoothed_les
-                    image2 = alpha*smoothed_out - beta*smoothed_les
-                else:
-                    image1 = alpha*output_image + beta*smoothed_les
-                    image2 = alpha*smoothed_out + beta*smoothed_les
-                
-                image1[out>0]=image2[out>0]
-                image1[image1<0] = 0
-                # image1[out>0] = ndimage.grey_erosion(image1*(out>0),structure = np.ones((1,5)))[out>0]
-                dilated_out = ndimage.binary_dilation(out>0,structure=np.ones((10,10)))
-                image1[dilated_out>0] = gaussian_filter(image1[dilated_out>0],sigma=3)
+            image1 = self.intensity_blend(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image,output_image)
 
             output_image = image1
             output_image -= output_image.min()

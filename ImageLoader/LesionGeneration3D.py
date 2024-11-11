@@ -77,7 +77,7 @@ class LesionGeneration3D(Dataset):
 
                 return label_sim
         
-    def ellipsoid(self,coord=(1,2,1),semi_a = 4, semi_b = 34, semi_c = 34, alpha=np.pi/4, beta=np.pi/4, gamma=np.pi/4,img_dim=(128,128,128)):
+    def create_ellipsoid(self,coord=(1,2,1),semi_a = 4, semi_b = 34, semi_c = 34, alpha=np.pi/4, beta=np.pi/4, gamma=np.pi/4,img_dim=(128,128,128)):
         img_dim = list(img_dim)
         img_dim[0],img_dim[1] = img_dim[1],img_dim[0]
         x = np.linspace(-img_dim[0]//2,np.ceil(img_dim[0]//2),img_dim[0])
@@ -124,7 +124,7 @@ class LesionGeneration3D(Dataset):
         ellipsoid = ellipsoid<0 
         return ellipsoid
         
-    def gaussian_noise(self, sigma=1.0,size=None, range_min=-0.3, range_max=1.0):
+    def create_pert(self, sigma=1.0,size=None, range_min=-0.3, range_max=1.0):
         noise = np.random.random(size)
         if(self.use_rician):
             img = np.ones(size)
@@ -138,7 +138,7 @@ class LesionGeneration3D(Dataset):
 
         return tex_noise
         
-    def shape_generation(self,scale_centroids,centroid_main,num_ellipses,semi_axes_range,perturb_sigma=[1,1,1],image_mask=1):
+    def localise_pert(self,scale_centroids,centroid_main,num_ellipses,semi_axes_range,perturb_sigma=[1,1,1],image_mask=1):
         # For the number of ellipsoids generate centroids in the local cloud
         random_centroids = centroid_main.T + (np.random.random((num_ellipses,3))*scale_centroids)
 
@@ -162,7 +162,7 @@ class LesionGeneration3D(Dataset):
         
         out = []
         for i in range(num_ellipses):
-            out.append(self.ellipsoid(random_centroids[i],*random_semi_axes[i],*random_rot_angles[i],img_dim=image_mask.shape) )
+            out.append(self.create_ellipsoid(random_centroids[i],*random_semi_axes[i],*random_rot_angles[i],img_dim=image_mask.shape) )
 
         out = np.logical_or.reduce(out)*image_mask
             
@@ -196,6 +196,72 @@ class LesionGeneration3D(Dataset):
         
         
         return final_region,1
+
+    def intensity_blend(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image):
+        if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5) and self.which_data!='lits'):
+            tex_noise_edema = self.create_pert(tex_sigma_edema,image_mask.shape,range_min,range_max)
+            if(not self.have_noise):
+                tex_noise_edema = 1.0
+
+            smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
+            smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
+            
+            if(self.which_data == 'lits'):
+                smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
+                smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
+
+
+            smoothed_out-=smoothed_out.min()
+            smoothed_out/=smoothed_out.max()
+
+            if(self.which_data=='lits'):
+                
+                image1 = alpha*output_image - beta*smoothed_les
+                image2 = alpha*smoothed_out - beta*smoothed_les
+
+            else:
+                image1 = alpha*output_image + smoothed_les
+                image2 = alpha*smoothed_out + smoothed_les
+
+            image1[out_edema>0]=image2[out_edema>0]
+            image1[image1<0] = 0
+
+            output_mask = np.logical_or(output_mask,out_edema)
+            output_image = image1
+            output_image -= output_image.min()
+            output_image /= output_image.max()
+        if(self.have_smoothing and (semi_axes_range==(2,5) or semi_axes_range==(3,5)) or self.which_data=='lits'):
+            smoothed_les = gaussian_filter(out*tex_noise, sigma=smoothing_mask)
+            if(self.which_data!='wmh'):
+                smoothed_les = out*(tex_noise + output_image)
+            smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
+
+            if(self.which_data=='lits'):
+                # lesion_mean = (output_image*gt_mask).mean()
+                # lesion_stdev = (output_image*gt_mask).std()
+                # lesion_min = lesion_mean - 1*lesion_stdev
+                # lesion_max = lesion_mean + 1*lesion_stdev
+                # print(lesion_mean,lesion_stdev,lesion_min,lesion_max)
+                # smoothed_les = self.normalize(smoothed_les,lesion_min,lesion_max)
+                image1 = alpha*output_image - beta*smoothed_les
+                image2 = alpha*smoothed_out - beta*smoothed_les
+            
+            elif(np.random.choice([0,1])*self.dark):
+                image1 = alpha*output_image - beta*smoothed_les
+                image2 = alpha*smoothed_out - beta*smoothed_les
+            else:
+                image1 = alpha*output_image + beta*smoothed_les
+                image2 = alpha*smoothed_out + beta*smoothed_les
+            image1[out>0]=image2[out>0]
+            image1[image1<0] =np.random.uniform(0,0.1)
+            print(image1.min())
+
+        # else:
+        #     image1 = alpha*output_image*(1-out) + beta*out*tex_noise
+        #     image1[image1<0] = 0
+        image_stuff = image>0.01
+        image1[image_stuff==0] = 0
+        return image1
 
     def simulation(self,image,inter_image,image_mask,num_lesions=3,gt_mask=None,roi_mask=None):
         param_dict = {}
@@ -269,12 +335,12 @@ class LesionGeneration3D(Dataset):
                 small_sigma = np.random.uniform(1,2)
                 out = self.gaussian_small_shapes(image_mask,small_sigma)
             else:   
-                out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask) 
+                out,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask) 
                 while(shape_status==-1):
                     print(shape_status)
                     random_coord_index = np.random.choice(len(x_corr),1)
                     centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index],z_corr[random_coord_index]])
-                    out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
+                    out,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
             if(np.array([roi_mask]).any()!=None):
                 out *= roi_mask                
 
@@ -285,83 +351,21 @@ class LesionGeneration3D(Dataset):
 
                 gamma = np.random.uniform(0.5,0.7)
                 #print(alpha,beta,gamma)
-                out_edema,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
+                out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
                 while(shape_status==-1):
                     print(shape_status)
                     random_coord_index = np.random.choice(len(x_corr),1)
                     centroid_main = np.array([x_corr[random_coord_index],y_corr[random_coord_index],z_corr[random_coord_index]])
-                    out_edema,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
+                    out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
 
             output_mask = np.logical_or(output_mask,out)
 
             if(self.have_noise and semi_axes_range !=(2,5)):
-                tex_noise = self.gaussian_noise(tex_sigma,image_mask.shape,range_min,range_max)
+                tex_noise = self.create_pert(tex_sigma,image_mask.shape,range_min,range_max)
             else:
                 tex_noise = 1.0
             
-            if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5) and self.which_data!='lits'):
-                tex_noise_edema = self.gaussian_noise(tex_sigma_edema,image_mask.shape,range_min,range_max)
-                if(not self.have_noise):
-                    tex_noise_edema = 1.0
-
-                smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
-                smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-                
-                if(self.which_data == 'lits'):
-                    smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
-                    smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-
-
-                smoothed_out-=smoothed_out.min()
-                smoothed_out/=smoothed_out.max()
-
-                if(self.which_data=='lits'):
-                    
-                    image1 = alpha*output_image - beta*smoothed_les
-                    image2 = alpha*smoothed_out - beta*smoothed_les
-
-                else:
-                    image1 = alpha*output_image + smoothed_les
-                    image2 = alpha*smoothed_out + smoothed_les
-
-                image1[out_edema>0]=image2[out_edema>0]
-                image1[image1<0] = 0
-
-                output_mask = np.logical_or(output_mask,out_edema)
-                output_image = image1
-                output_image -= output_image.min()
-                output_image /= output_image.max()
-            if(self.have_smoothing and (semi_axes_range==(2,5) or semi_axes_range==(3,5)) or self.which_data=='lits'):
-                smoothed_les = gaussian_filter(out*tex_noise, sigma=smoothing_mask)
-                if(self.which_data!='wmh'):
-                    smoothed_les = out*(tex_noise + output_image)
-                smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-
-                if(self.which_data=='lits'):
-                    # lesion_mean = (output_image*gt_mask).mean()
-                    # lesion_stdev = (output_image*gt_mask).std()
-                    # lesion_min = lesion_mean - 1*lesion_stdev
-                    # lesion_max = lesion_mean + 1*lesion_stdev
-                    # print(lesion_mean,lesion_stdev,lesion_min,lesion_max)
-                    # smoothed_les = self.normalize(smoothed_les,lesion_min,lesion_max)
-                    image1 = alpha*output_image - beta*smoothed_les
-                    image2 = alpha*smoothed_out - beta*smoothed_les
-                
-                elif(np.random.choice([0,1])*self.dark):
-                    image1 = alpha*output_image - beta*smoothed_les
-                    image2 = alpha*smoothed_out - beta*smoothed_les
-                else:
-                    image1 = alpha*output_image + beta*smoothed_les
-                    image2 = alpha*smoothed_out + beta*smoothed_les
-                image1[out>0]=image2[out>0]
-                image1[image1<0] =np.random.uniform(0,0.1)
-                print(image1.min())
-
-            # else:
-            #     image1 = alpha*output_image*(1-out) + beta*out*tex_noise
-            #     image1[image1<0] = 0
-            image_stuff = image>0.01
-            image1[image_stuff==0] = 0
+            image1 = self.intensity_blend(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image)
             output_image = image1
             output_image -= output_image.min()
             output_image /= output_image.max()
@@ -442,11 +446,11 @@ class LesionGeneration3D(Dataset):
     #             small_sigma = np.random.uniform(1,2)
     #             out = self.gaussian_small_shapes(image_mask,small_sigma)
     #         else:   
-    #             out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask) 
+    #             out,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask) 
     #             while(shape_status==-1):
     #                 print(shape_status)
     #                 centroid_main = np.array([regions[i].centroid[1],regions[i].centroid[0],regions[i].centroid[2]]).T            # print(centroid_main,roi_with_masks[centroid_main[0],centroid_main[1],centroid_main[2]])
-    #                 out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
+    #                 out,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
                 
 
     #         if(semi_axes_range !=(2,5) and semi_axes_range !=(3,5) and self.which_data!='lits'):
@@ -456,21 +460,21 @@ class LesionGeneration3D(Dataset):
 
     #             gamma = np.random.uniform(0.5,0.7)
     #             #print(alpha,beta,gamma)
-    #             out_edema,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
+    #             out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
     #             while(shape_status==-1):
     #                 print(shape_status)
     #                 centroid_main = np.array([regions[i].centroid[1],regions[i].centroid[0],regions[i].centroid[2]]).T            # print(centroid_main,roi_with_masks[centroid_main[0],centroid_main[1],centroid_main[2]])
-    #                 out_edema,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
+    #                 out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
 
     #         output_mask = np.logical_or(output_mask,out)
 
     #         if(self.have_noise and semi_axes_range !=(2,5)):
-    #             tex_noise = self.gaussian_noise(tex_sigma,self.size,range_min,range_max)
+    #             tex_noise = self.create_pert(tex_sigma,self.size,range_min,range_max)
     #         else:
     #             tex_noise = 1.0
             
     #         if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5) and self.which_data!='lits'):
-    #             tex_noise_edema = self.gaussian_noise(tex_sigma_edema,self.size,range_min,range_max)
+    #             tex_noise_edema = self.create_pert(tex_sigma_edema,self.size,range_min,range_max)
     #             if(not self.have_noise):
     #                 tex_noise_edema = 1.0
 
@@ -592,7 +596,7 @@ class LesionGeneration3D(Dataset):
                 small_sigma = np.random.uniform(1,2)
                 out = self.gaussian_small_shapes(image_mask,small_sigma)
             else:   
-                out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
+                out,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
 
             out*=output_total_mask
                 #pass
@@ -607,19 +611,19 @@ class LesionGeneration3D(Dataset):
 
                 gamma = np.random.uniform(0.5,0.7)
                 #print(alpha,beta,gamma)
-                out_edema,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
+                out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
                 out_edema*=output_total_mask
                     #pass
 
             output_mask = np.logical_or(output_mask,out)
 
             if(self.have_noise and semi_axes_range !=(2,5)):
-                tex_noise = self.gaussian_noise(tex_sigma,image_mask.shape,range_min,range_max)
+                tex_noise = self.create_pert(tex_sigma,image_mask.shape,range_min,range_max)
             else:
                 tex_noise = 1.0
             
             if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
-                tex_noise_edema = self.gaussian_noise(tex_sigma_edema,image_mask.shape,range_min,range_max)
+                tex_noise_edema = self.create_pert(tex_sigma_edema,image_mask.shape,range_min,range_max)
 
                 smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
                 smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
@@ -877,7 +881,7 @@ class LesionGeneration3D(Dataset):
     #             small_sigma = np.random.uniform(1,2)
     #             out = self.gaussian_small_shapes(brain_mask_img,small_sigma)
     #         else:   
-    #             out,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=brain_mask_img) 
+    #             out,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=brain_mask_img) 
 
     #         if(self.on_real_with_mask):
     #             out*=output_total_mask
@@ -893,7 +897,7 @@ class LesionGeneration3D(Dataset):
 
     #             gamma = np.random.uniform(0.5,0.7)
     #             #print(alpha,beta,gamma)
-    #             out_edema,shape_status = self.shape_generation(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=brain_mask_img)
+    #             out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=brain_mask_img)
     #             if(self.on_real_with_mask):
     #                 out_edema*=output_total_mask
     #                 #pass
@@ -901,12 +905,12 @@ class LesionGeneration3D(Dataset):
     #         output_mask = np.logical_or(output_mask,out)
 
     #         if(self.have_noise and semi_axes_range !=(2,5)):
-    #             tex_noise = self.gaussian_noise(tex_sigma,self.size,range_min,range_max)
+    #             tex_noise = self.create_pert(tex_sigma,self.size,range_min,range_max)
     #         else:
     #             tex_noise = 1.0
             
     #         if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
-    #             tex_noise_edema = self.gaussian_noise(tex_sigma_edema,self.size,range_min,range_max)
+    #             tex_noise_edema = self.create_pert(tex_sigma_edema,self.size,range_min,range_max)
 
     #             smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
     #             smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
