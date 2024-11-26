@@ -129,12 +129,12 @@ class LesionGeneration3D(Dataset):
         if(self.use_rician):
             img = np.ones(size)
             noise = rice.rvs(img,scale=1)
-        gaussian_noise = gaussian_filter(noise,sigma) + 0.5*gaussian_filter(noise,sigma/2) + 0.25*gaussian_filter(noise,sigma/4)
-        gaussian_noise_min = gaussian_noise.min()
-        gaussian_noise_max = gaussian_noise.max()
+        noise = gaussian_filter(noise,sigma) + 0.5*gaussian_filter(noise,sigma/2) + 0.25*gaussian_filter(noise,sigma/4)
+        noise_min = noise.min()
+        noise_max = noise.max()
 
         # Normalizing  (a - amin)*(tmax-tmin)/(a_max - a_min) + tmin
-        tex_noise = ((gaussian_noise - gaussian_noise_min)*(range_max-range_min)/(gaussian_noise_max-gaussian_noise_min)) + range_min 
+        tex_noise = ((noise - noise_min)*(range_max-range_min)/(noise_max-noise_min)) + range_min 
 
         return tex_noise
         
@@ -197,7 +197,7 @@ class LesionGeneration3D(Dataset):
         
         return final_region,1
 
-    def intensity_blend(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image):
+    def blend_intensity(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image):
         if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5) and self.which_data!='lits'):
             tex_noise_edema = self.create_pert(tex_sigma_edema,image_mask.shape,range_min,range_max)
             if(not self.have_noise):
@@ -365,7 +365,7 @@ class LesionGeneration3D(Dataset):
             else:
                 tex_noise = 1.0
             
-            image1 = self.intensity_blend(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image)
+            image1 = self.blend_intensity(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image)
             output_image = image1
             output_image -= output_image.min()
             output_image /= output_image.max()

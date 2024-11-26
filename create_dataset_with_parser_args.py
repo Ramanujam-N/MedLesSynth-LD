@@ -5,11 +5,22 @@ import json
 import matplotlib.pyplot as plt
 import glob
 from scipy.ndimage import gaussian_filter
+# from ImageLoader.DatasetCreation import LesionGeneration
 from ImageLoader.LesionGeneration2D import LesionGeneration2D
+from ImageLoader.LesionGeneration2D_retina import LesionGeneration2D_retina
+from ImageLoader.LesionGeneration2D_busi_Mul import LesionGeneration2D_busi
 from ImageLoader.LesionGeneration3D import LesionGeneration3D
 from ImageLoader.BackgroundGeneration2D import BackgroundGeneration2D
 from ImageLoader.BackgroundGeneration3D import BackgroundGeneration3D
 from ImageLoader.BackgroundGenerationLiver3D import BackgroundGenerationLiver3D
+from ImageLoader.FPILoader2D import FPILoader2D
+from ImageLoader.FPILoader2D_retina import FPILoader2D_retina
+from ImageLoader.FPILoader3D import FPILoader3D
+from ImageLoader.CutPaste2D import CutPaste2D
+from ImageLoader.CutPaste2D_retina import CutPaste2D_retina
+from ImageLoader.CutPaste3D import CutPaste3D
+from ImageLoader.PatchesStructure2D import PatchesStructure2D
+from ImageLoader.PatchesStructure3D import PatchesStructure3D
 
 
 from tqdm import tqdm
@@ -82,39 +93,59 @@ def generic_bg_3d(save_path,image_size,data,num_images,phase='train',status=[0,0
             nib.save(label, img_path+ str(i)+'_manualmask.nii.gz')
             pbar.update(0)
 
-def generate_and_save_2d(clean_indexes,save_path,image_size,data,num_images,phase='train',status=[0,0,0],clean=True):
+def generate_and_save_2d(clean_indexes,save_path,image_size,data,num_images,phase='train',status=[0,0,0],clean=True,exp_id='default'):
     phase_choice = {'train':0,'val':1,'test':2}[phase]
     img_type = ['Training','Validation','Testing']
     img_folder = ['TrainSet','ValSet','TestSet']
-    img_path = save_path+'/'+img_folder[phase_choice]+'/' 
+    img_path = save_path+'/'+img_folder[phase_choice]+'/' + exp_id + '/'
     os.makedirs(img_path,exist_ok=True)
     img_path+=img_type[phase_choice]+'_'
     
     if(data=='busi'):
-        num_lesions = np.random.randint(1,3) #5,15
-        semi_axes_range = [(7,10),(10,15),(20,25),(50,75)] #(100,105)
-        range_sampling = [0.1,0.2,0.3,0.4]
+        num_lesions = np.random.randint(1,2) #5,15
+        # semi_axes_range = [(7,10),(10,15),(20,25),(50,75)] #(100,105)
+        semi_axes_range = [(20,45),(50,75)] #(100,105)
+        range_sampling = [0.6,0.4]
         centroid_scaling = 30
-        ellipses = 10
+        ellipses = 60 #15
+    
+    if(data=='retina'):
+        num_lesions = (5,25) #5,15
+        if(clean==False):
+            num_lesions = (5,15)
+        semi_axes_range = [(2,5),(3,5)]
+        range_sampling = [0.7,0.3]
+        centroid_scaling = 80
+        ellipses = 15
 
     # dataset = ConcatDataset([LesionGeneration2D(clean_indexes,have_texture=Fal,have_noise=True,have_edema=False,have_smoothing=True,dark=True,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axes_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses) for i in range(100)])
 
 
     if(clean==True):
-        dataset = ConcatDataset([LesionGeneration2D(img_path=clean_indexes['images'],gt_path=None,have_texture=False,have_noise=True,have_edema=False,have_smoothing=True,dark=True,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axes_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses) for i in range(100)])
+        if(data=='retina'):
+            dataset = ConcatDataset([LesionGeneration2D_retina(img_path=clean_indexes,gt_path=None,have_texture=False,have_noise=True,have_edema=False,have_smoothing=True,dark=True,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axes_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses) for i in range(100)])
+        else:
+            dataset = ConcatDataset([LesionGeneration2D_busi(img_path=clean_indexes,gt_path=None,have_texture=False,have_noise=True,have_edema=False,have_smoothing=True,dark=True,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axes_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses) for i in range(100)])
     else:
-        dataset = ConcatDataset([LesionGeneration2D(img_path=clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg'],have_texture=False,have_noise=True,have_edema=False,have_smoothing=True,dark=True,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axes_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses) for i in range(100)])
+        if(data=='retina'):
+            dataset = ConcatDataset([LesionGeneration2D_retina(img_path=clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg'],have_texture=False,have_noise=True,have_edema=False,have_smoothing=True,dark=True,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axes_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses) for i in range(100)])
+        else:
+            dataset = ConcatDataset([LesionGeneration2D_busi(img_path=clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg'],have_texture=False,have_noise=True,have_edema=False,have_smoothing=True,dark=True,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axes_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses) for i in range(100)])
 
     with tqdm(range(status[phase_choice],num_images)) as pbar:
         for i in pbar:  
-            image,label,clean_path,param = dataset[i]
+            image,smoothles,label,clean_path,param,inp_image,tex_noise,noise_inter = dataset[i]
 
             with open(img_path+ str(i) + '.json', 'w') as f:
                 param['clean_path'] = clean_path
                 json.dump(param, f)
 
             skimage.io.imsave(img_path+ str(i)+'_image.png',image)
+            skimage.io.imsave(img_path+ str(i)+'_smoothles.png',smoothles)
             skimage.io.imsave(img_path+ str(i)+'_mask.png',label)
+            skimage.io.imsave(img_path+ str(i)+'_inp.png',inp_image)
+            skimage.io.imsave(img_path+ str(i)+'_tex.png',tex_noise)
+            skimage.io.imsave(img_path+ str(i)+'_inter_noise.png',noise_inter)            
             pbar.update(0)
 
 def generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images,phase='train',status=[0,0,0],clean=True,use_rician=False):
@@ -181,13 +212,453 @@ def generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images,phas
             nib.save(label, img_path+ str(i)+'_manualmask.nii.gz')
             pbar.update(0)
 
+from ImageLoader.SphereGeneration3D import SphereGeneration3D
+from ImageLoader.SphereGeneration2D import SphereGeneration2D
 
-def create(mode,data,workers,batch,date,on_data,unique_id,status,system_data_path,use_rician):
+from ImageLoader.RandomShapes3D import RandomShapes3D
+from ImageLoader.RandomShapes2D import RandomShapes2D
+
+def squares_generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images,phase='train',status=[0,0,0],use_rician=False):
+    phase_choice = {'train':0,'val':1,'test':2}[phase]
+    img_type = ['Training','Validation','Testing']
+    img_folder = ['TrainSet','ValSet','TestSet']
+    img_path = save_path+'/'+img_folder[phase_choice]+'/' 
+    os.makedirs(img_path,exist_ok=True)
+    img_path+=img_type[phase_choice]+'_'
+    
+    num_lesions = 2
+    semi_axis_range = [(5,10),(10,15)]
+    range_sampling = [0.5,0.5,]
+    centroid_scaling = 10
+    ellipses = 10
+    print(data)
+    dataset = ConcatDataset([PatchesStructure3D(clean_indexes['train_names_flair'],mask_path=None,gt_path=clean_indexes['train_names_seg'],abl_type = data) for i in range(100)])
+
+    with tqdm(range(status[phase_choice],num_images)) as pbar:
+        for i in pbar:  
+            image,label,affine, = dataset[i]            
+
+            img = nib.Nifti1Image(image, affine=affine)
+            label = nib.Nifti1Image(label, affine=affine)
+
+            nib.save(img, img_path+ str(i)+'_FLAIR.nii.gz')
+            nib.save(label, img_path+ str(i)+'_manualmask.nii.gz')
+            pbar.update(0)
+
+
+def spheres_generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images,phase='train',status=[0,0,0],use_rician=False):
+    phase_choice = {'train':0,'val':1,'test':2}[phase]
+    img_type = ['Training','Validation','Testing']
+    img_folder = ['TrainSet','ValSet','TestSet']
+    img_path = save_path+'/'+img_folder[phase_choice]+'/' 
+    os.makedirs(img_path,exist_ok=True)
+    img_path+=img_type[phase_choice]+'_'
+    
+    num_lesions = 2
+    semi_axis_range = [(5,10),(10,15)]
+    range_sampling = [0.5,0.5,]
+    centroid_scaling = 10
+    ellipses = 10
+    print(data)
+    if('spheres' in data):
+        dataset = ConcatDataset([SphereGeneration3D(clean_indexes['train_names_flair'],mask_path=None,gt_path=clean_indexes['train_names_seg'],num_lesions = num_lesions) for i in range(100)])
+    elif('randomshapes' in data):
+        dataset = ConcatDataset([RandomShapes3D(clean_indexes['train_names_flair'],mask_path=None,gt_path=clean_indexes['train_names_seg'],have_texture=False,have_noise=False,have_edema=False,have_smoothing=False,dark=False,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axis_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses) for i in range(100)])
+    elif('texshapes' in data):
+        dataset = ConcatDataset([RandomShapes3D(clean_indexes['train_names_flair'],mask_path=None,gt_path=clean_indexes['train_names_seg'],have_texture=True,have_noise=True,have_edema=False,have_smoothing=True,dark=False,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axis_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses,use_rician=use_rician) for i in range(100)])
+
+    with tqdm(range(status[phase_choice],num_images)) as pbar:
+        for i in pbar:  
+            image,label,affine, = dataset[i]            
+
+            img = nib.Nifti1Image(image, affine=affine)
+            label = nib.Nifti1Image(label, affine=affine)
+
+            nib.save(img, img_path+ str(i)+'_FLAIR.nii.gz')
+            nib.save(label, img_path+ str(i)+'_manualmask.nii.gz')
+            pbar.update(0)
+
+def squares_generate_and_save_2d(clean_indexes,save_path,image_size,data,num_images,phase='train',status=[0,0,0]):
+    phase_choice = {'train':0,'val':1,'test':2}[phase]
+    img_type = ['Training','Validation','Testing']
+    img_folder = ['TrainSet','ValSet','TestSet']
+    img_path = save_path+'/'+img_folder[phase_choice]+'/' 
+    os.makedirs(img_path,exist_ok=True)
+    img_path+=img_type[phase_choice]+'_'
+    
+    num_lesions = 2
+    semi_axis_range = [(20,25),(25,30)]
+    range_sampling = [0.5,0.5,]
+    centroid_scaling = 10
+    ellipses = 10
+
+    dataset = ConcatDataset([PatchesStructure2D(clean_indexes['train_names_flair'],mask_path=None,gt_path=clean_indexes['train_names_seg'],image_size=image_size,abl_type = data,data=data) for i in range(100)])
+
+    with tqdm(range(status[phase_choice],num_images)) as pbar:
+        for i in pbar:  
+            image,label = dataset[i]
+
+            # with open(img_path+ str(i) + '.json', 'w') as f:
+            #     param['clean_path'] = clean_path
+            #     json.dump(param, f)
+
+            skimage.io.imsave(img_path+ str(i)+'_image.png',image)
+            skimage.io.imsave(img_path+ str(i)+'_mask.png',label)
+            pbar.update(0)
+
+def spheres_generate_and_save_2d(clean_indexes,save_path,image_size,data,num_images,phase='train',status=[0,0,0]):
+    phase_choice = {'train':0,'val':1,'test':2}[phase]
+    img_type = ['Training','Validation','Testing']
+    img_folder = ['TrainSet','ValSet','TestSet']
+    img_path = save_path+'/'+img_folder[phase_choice]+'/' 
+    os.makedirs(img_path,exist_ok=True)
+    img_path+=img_type[phase_choice]+'_'
+    abl_type = data
+
+    num_lesions = 2
+    semi_axis_range = [(20,25),(25,30)]
+    range_sampling = [0.5,0.5,]
+    centroid_scaling = 10
+    ellipses = 10
+    if('idrid' in data):
+        num_lesions = (5,25) #5,15
+        num_lesions = (5,15)
+        semi_axes_range = [(2,5),(3,5)]
+        range_sampling = [0.3,0.7]
+        centroid_scaling = 150
+        ellipses = 30
+    if('spheres' in data):        
+        dataset = ConcatDataset([SphereGeneration2D(clean_indexes['train_names_flair'],mask_path=None,gt_path=clean_indexes['train_names_seg'],num_lesions = num_lesions,data=data) for i in range(100)])
+    elif('randomshapes' in data):
+        if('idrid' in data):
+            data = 'retina'
+            dataset = ConcatDataset([LesionGeneration2D_retina(img_path=clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg'],have_texture=False,have_noise=True,have_edema=False,have_smoothing=True,dark=True,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axes_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses,abl_type=abl_type) for i in range(100)])
+
+        else:    
+            dataset = ConcatDataset([RandomShapes2D(clean_indexes['train_names_flair'],mask_path=None,gt_path=clean_indexes['train_names_seg'],have_texture=False,have_noise=False,have_edema=False,have_smoothing=False,dark=False,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axis_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses) for i in range(100)])
+    elif('texshapes' in data):
+        if('idrid' in data):
+            data = 'retina'
+            dataset = ConcatDataset([LesionGeneration2D_retina(img_path=clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg'],have_texture=False,have_noise=True,have_edema=False,have_smoothing=True,dark=True,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axes_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses,abl_type=abl_type) for i in range(100)])
+
+        else:
+            dataset = ConcatDataset([RandomShapes2D(clean_indexes['train_names_flair'],mask_path=None,gt_path=clean_indexes['train_names_seg'],have_texture=True,have_noise=True,have_edema=False,have_smoothing=True,dark=False,which_data=data,size=image_size,perturb=False,num_lesions=num_lesions,semi_axis_range=semi_axis_range,centroid_scale= centroid_scaling,range_sampling=range_sampling,num_ellipses=ellipses) for i in range(100)])
+
+    with tqdm(range(status[phase_choice],num_images)) as pbar:
+        for i in pbar:  
+            image,label,clean_path,param = dataset[i]
+
+            with open(img_path+ str(i) + '.json', 'w') as f:
+                param['clean_path'] = clean_path
+                json.dump(param, f)
+
+            skimage.io.imsave(img_path+ str(i)+'_image.png',image)
+            skimage.io.imsave(img_path+ str(i)+'_mask.png',label)
+            pbar.update(0)
+
+
+def fpi_generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images,phase='train',status=[0,0,0],use_rician=False):
+    phase_choice = {'train':0,'val':1,'test':2}[phase]
+    img_type = ['Training','Validation','Testing']
+    img_folder = ['TrainSet','ValSet','TestSet']
+    img_path = save_path+'/'+img_folder[phase_choice]+'/' 
+    os.makedirs(img_path,exist_ok=True)
+    img_path+=img_type[phase_choice]+'_'
+    
+    num_lesions = 2
+    semi_axis_range = [(5,10),(10,15)]
+    range_sampling = [0.5,0.5,]
+    centroid_scaling = 10
+    ellipses = 10
+    print(data)
+    if('fpi' in data):
+        dataset = ConcatDataset([FPILoader3D(clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg']) for i in range(100)])
+    elif('cutpaste' in data):
+        dataset = ConcatDataset([CutPaste3D(clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg']) for i in range(100)])
+    elif('patchesstruct' in data):
+        dataset = ConcatDataset([PatchesStructure3D(clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg'],use_rician=use_rician) for i in range(100)])
+
+    with tqdm(range(status[phase_choice],num_images)) as pbar:
+        for i in pbar:  
+            image,label,affine, = dataset[i]            
+
+            img = nib.Nifti1Image(image, affine=affine)
+            label = nib.Nifti1Image(label, affine=affine)
+
+            nib.save(img, img_path+ str(i)+'_FLAIR.nii.gz')
+            nib.save(label, img_path+ str(i)+'_manualmask.nii.gz')
+            pbar.update(0)
+
+
+def fpi_generate_and_save_2d(clean_indexes,save_path,image_size,data,num_images,phase='train',status=[0,0,0],use_rician=False):
+    phase_choice = {'train':0,'val':1,'test':2}[phase]
+    img_type = ['Training','Validation','Testing']
+    img_folder = ['TrainSet','ValSet','TestSet']
+    img_path = save_path+'/'+img_folder[phase_choice]+'/' 
+    os.makedirs(img_path,exist_ok=True)
+    img_path+=img_type[phase_choice]+'_'
+    
+    num_lesions = 2
+    semi_axis_range = [(20,25),(25,30)]
+    range_sampling = [0.5,0.5,]
+    centroid_scaling = 10
+    ellipses = 10
+
+    if('fpi' in data):
+        if('retina' in data):
+            dataset = ConcatDataset([FPILoader2D_retina(clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg']) for i in range(100)])
+        else:        
+            dataset = ConcatDataset([FPILoader2D(clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg']) for i in range(100)])
+    elif('cutpaste' in data):
+        if('retina' in data):
+            dataset = ConcatDataset([CutPaste2D_retina(clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg']) for i in range(100)])
+        else:
+            dataset = ConcatDataset([CutPaste2D(clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg']) for i in range(100)])
+    elif('patchesstruct' in data):
+        dataset = ConcatDataset([PatchesStructure2D(clean_indexes['train_names_flair'],gt_path=clean_indexes['train_names_seg'],use_rician=use_rician) for i in range(100)])
+
+    with tqdm(range(status[phase_choice],num_images)) as pbar:
+        for i in pbar:  
+            image,label = dataset[i]
+
+            # with open(img_path+ str(i) + '.json', 'w') as f:
+            #     param['clean_path'] = clean_path
+            #     json.dump(param, f)
+
+            skimage.io.imsave(img_path+ str(i)+'_image.png',image)
+            skimage.io.imsave(img_path+ str(i)+'_mask.png',label)
+            pbar.update(0)
+
+def create(mode,data,workers,batch,date,on_data,unique_id,status,system_data_path,use_rician,exp_id):
     save_path = './simulation_data/'+date+'/'+data
+
+#---------------------------------------------------- To Generate on Simulated Lesions------------------------------------------------------------
+    
+    if(data=='busi'):
+        image_size = (598,494)
+        image_size = (512,512)
+
+        split_sizes = (42*5,6*5,12*5)
+        clean_indexes = glob.glob('/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f/LabData/BUSI/Dataset_BUSI/Dataset_BUSI_with_GT/normal/*).png')        
+        generate_and_save_2d(clean_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train')
+        generate_and_save_2d(clean_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val')
+        generate_and_save_2d(clean_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test')
+
+
+    elif(data=='retina'): # idrid
+        image_size = (1072,712)
+        image_size = (1024,768)
+
+        split_sizes = (42*5,6*5,12*5)
+        clean_indexes = glob.glob('/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f/LabData/Retinal_images/Dataset_types/Normal_STARE/*.png')
+        generate_and_save_2d(clean_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train')
+        generate_and_save_2d(clean_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val')
+        generate_and_save_2d(clean_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test')
+    elif(data=='wmh'):
+        image_size = (132,170,47)
+        image_size = (128,128,48)
+        image_size = (128,128,128)
+
+        clean_indexes = np.load('./Data_splits/Clean_indexes/clean_nimh_w_tissue_3d.npy',allow_pickle=True).item()
+        split_sizes = (42*5,6*5,12*5)
+        generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status)
+        generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status)
+        generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status)
+    elif(data=='brats'):
+        image_size = (137,172,139)
+        image_size = (128,128,128)
+
+        clean_indexes = np.load('./Data_splits/Clean_indexes/complete_nimh_3d.npy',allow_pickle=True).item()
+        split_sizes = (42*5,6*5,12*5)
+        generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status)
+        generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status)
+        generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status)
+
+    elif(data=='lits'):
+        image_size = (137,172,139)
+        image_size = (128,128,128)
+
+        clean_indexes = np.load('./Data_splits/Clean_indexes/complete_clean_liver.npy',allow_pickle=True).item()
+        split_sizes = (42*5,6*5,12*5)
+        generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status)
+        generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status)
+        generate_and_save_3d(clean_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status)
+#---------------------------------------------------- To Generate on Random Shapes (Ablation) ------------------------------------------------------------
+
+    elif(data=='spheresbrats' or data=='randomshapesbrats' or data=='texshapesbrats'):
+        image_size = (128,128,128)
+        brats_indexes = np.load('./Data_splits/Train_val_test_42_6_x/brats_indexes.npy', allow_pickle=True).item()
+        brats_indexes = helper_path_configuration(brats_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        spheres_generate_and_save_3d(brats_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,use_rician=use_rician)
+        spheres_generate_and_save_3d(brats_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,use_rician=use_rician)
+        spheres_generate_and_save_3d(brats_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,use_rician=use_rician)
+
+    elif(data=='sphereswmh' or data=='randomshapeswmh' or data=='texshapeswmh'):
+        image_size = (128,128,128)
+        wmh_indexes = np.load('./Data_splits/Train_val_test_42_6_x/wmh_indexes.npy', allow_pickle=True).item()
+        wmh_indexes = helper_path_configuration(wmh_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+        
+
+        spheres_generate_and_save_3d(wmh_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,use_rician=use_rician)
+        spheres_generate_and_save_3d(wmh_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,use_rician=use_rician)
+        spheres_generate_and_save_3d(wmh_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,use_rician=use_rician)
+
+    elif(data=='sphereslits' or data=='randomshapeslits' or data=='texshapeslits'):
+        image_size = (128,128,128)
+        liver_indexes = np.load('./Data_splits/Train_val_test_42_6_x/liver_indexes.npy', allow_pickle=True).item()
+        liver_indexes = helper_path_configuration(liver_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        spheres_generate_and_save_3d(liver_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status)
+        spheres_generate_and_save_3d(liver_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status)
+        spheres_generate_and_save_3d(liver_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status)
+
+    elif(data=='spheresbusi' or data=='randomshapesbusi' or data=='texshapesbusi'):
+        image_size = (512,512)
+        busi_indexes = np.load('./Data_splits/Train_val_test_42_6_x/busi_indexes.npy', allow_pickle=True).item()
+        busi_indexes = helper_path_configuration(busi_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        spheres_generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status)
+        spheres_generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status)
+        spheres_generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status)
+
+    elif(data=='spheresidrid' or data=='randomshapesidrid' or data=='texshapesidrid'):
+        image_size = (1024,2048)
+        idrid_indexes = np.load('./Data_splits/Train_val_test_42_6_x/idrid_new_indexes.npy', allow_pickle=True).item()
+        idrid_indexes = helper_path_configuration(idrid_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        spheres_generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status)
+        spheres_generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status)
+        spheres_generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status)
+
+# ---------------------------------------------------- To Generate new ablation (Ablation) ---------------------------------------------
+
+    elif(data=='square_noise_brats' or data=='square_gaussian_brats'):
+        image_size = (128,128,128)
+        brats_indexes = np.load('./Data_splits/Train_val_test_42_6_x/brats_indexes.npy', allow_pickle=True).item()
+        brats_indexes = helper_path_configuration(brats_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        squares_generate_and_save_3d(brats_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,use_rician=use_rician)
+        squares_generate_and_save_3d(brats_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,use_rician=use_rician)
+        squares_generate_and_save_3d(brats_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,use_rician=use_rician)
+
+    elif(data=='square_noise_wmh' or data=='square_gaussian_wmh'):
+        image_size = (128,128,128)
+        wmh_indexes = np.load('./Data_splits/Train_val_test_42_6_x/wmh_indexes.npy', allow_pickle=True).item()
+        wmh_indexes = helper_path_configuration(wmh_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+        
+
+        squares_generate_and_save_3d(wmh_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,use_rician=use_rician)
+        squares_generate_and_save_3d(wmh_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,use_rician=use_rician)
+        squares_generate_and_save_3d(wmh_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,use_rician=use_rician)
+
+    elif(data=='square_noise_lits' or data=='square_gaussian_lits'):
+        image_size = (128,128,128)
+        liver_indexes = np.load('./Data_splits/Train_val_test_42_6_x/liver_indexes.npy', allow_pickle=True).item()
+        liver_indexes = helper_path_configuration(liver_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        squares_generate_and_save_3d(liver_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status)
+        squares_generate_and_save_3d(liver_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status)
+        squares_generate_and_save_3d(liver_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status)
+
+    elif(data=='square_noise_busi' or data=='square_gaussian_busi'):
+        image_size = (512,512)
+        busi_indexes = np.load('./Data_splits/Train_val_test_42_6_x/busi_indexes.npy', allow_pickle=True).item()
+        busi_indexes = helper_path_configuration(busi_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        squares_generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status)
+        squares_generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status)
+        squares_generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status)
+
+    elif(data=='square_noise_idrid' or data=='square_gaussian_idrid'):
+        image_size = (1024,2048,3)
+        idrid_indexes = np.load('./Data_splits/Train_val_test_42_6_x/idrid_new_indexes.npy', allow_pickle=True).item()
+        idrid_indexes = helper_path_configuration(idrid_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        squares_generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status)
+        squares_generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status)
+        squares_generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status)
+
+# -----------------------------------------------------FPI-CutPAste----------------------------------------------------------------------
+    elif(data=='fpibrats' or data=='cutpastebrats' or data=='patchesstructbrats'):
+        image_size = (128,128,128)
+        brats_indexes = np.load('./Data_splits/Train_val_test_42_6_x/brats_indexes.npy', allow_pickle=True).item()
+        brats_indexes = helper_path_configuration(brats_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        fpi_generate_and_save_3d(brats_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,use_rician=use_rician)
+        fpi_generate_and_save_3d(brats_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,use_rician=use_rician)
+        fpi_generate_and_save_3d(brats_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,use_rician=use_rician)
+
+    elif(data=='fpiwmh' or data=='cutpastewmh' or data=='patchesstructwmh'):
+        image_size = (128,128,128)
+        wmh_indexes = np.load('./Data_splits/Train_val_test_42_6_x/wmh_indexes.npy', allow_pickle=True).item()
+        wmh_indexes = helper_path_configuration(wmh_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+        
+
+        fpi_generate_and_save_3d(wmh_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,use_rician=use_rician)
+        fpi_generate_and_save_3d(wmh_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,use_rician=use_rician)
+        fpi_generate_and_save_3d(wmh_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,use_rician=use_rician)
+
+    elif(data=='fpilits' or data=='cutpastelits' or data=='patchesstructlits'):
+        image_size = (128,128,128)
+        liver_indexes = np.load('./Data_splits/Train_val_test_42_6_x/liver_indexes.npy', allow_pickle=True).item()
+        liver_indexes = helper_path_configuration(liver_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        fpi_generate_and_save_3d(liver_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,use_rician=use_rician)
+        fpi_generate_and_save_3d(liver_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,use_rician=use_rician)
+        fpi_generate_and_save_3d(liver_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,use_rician=use_rician)
+
+    elif(data=='fpibusi' or data=='cutpastebusi' or data=='patchesstructbusi'):
+        image_size = (512,512)
+        busi_indexes = np.load('./Data_splits/Train_val_test_42_6_x/busi_indexes.npy', allow_pickle=True).item()
+        busi_indexes = helper_path_configuration(busi_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        fpi_generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,use_rician=use_rician)
+        fpi_generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,use_rician=use_rician)
+        fpi_generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,use_rician=use_rician)
+
+    elif(data=='fpiretina' or data=='cutpasteretina' or data=='patchesstructretina'):
+        image_size = (1024,2048,3)
+        idrid_indexes = np.load('./Data_splits/Train_val_test_42_6_x/idrid_new_indexes.npy', allow_pickle=True).item()
+        idrid_indexes = helper_path_configuration(idrid_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,0)
+
+        fpi_generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,use_rician=use_rician)
+        fpi_generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,use_rician=use_rician)
+        fpi_generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,use_rician=use_rician)
 
 #---------------------------------------------------- Generic BG Generation------------------------------------------------------------
         
-    if(data=='background3d' or data=='background3dliver'):
+    elif(data=='background3d' or data=='background3dliver'):
         image_size = (128,128,128)
 
         split_sizes = (42*5,6*5,12*5)
@@ -310,15 +781,32 @@ def create(mode,data,workers,batch,date,on_data,unique_id,status,system_data_pat
 
         split_sizes = (42*5,6*5,12*5)
         data='busi'
-        generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,clean=False)
-        generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,clean=False)
-        generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,clean=False)
+        generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,clean=False,exp_id=exp_id)
+        generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,clean=False,exp_id=exp_id)
+        generate_and_save_2d(busi_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,clean=False,exp_id=exp_id)
 
+    elif(data=='idridonidrid'):
+        image_size = (1024,2048) #(512 512)
+        idrid_indexes = np.load('./Data_splits/Train_val_test_42_6_x/idrid_new_indexes.npy', allow_pickle=True).item()
+        idrid_indexes = helper_path_configuration(idrid_indexes,system_data_path)
+
+        split_sizes = (42*5,6*5,12*5)
+        data='retina'
+        generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[0],phase='train',status=status,clean=False)
+        generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[1],phase='val',status=status,clean=False)
+        generate_and_save_2d(idrid_indexes,save_path,image_size,data,num_images=split_sizes[2],phase='test',status=status,clean=False)
 
 if(__name__ =="__main__"):
     parser = argparse.ArgumentParser()
     parser.add_argument("-mode",default='N',choices=['N','W_gt','W_centroid',],help="Type of simulation")
-    parser.add_argument("-data",default='brats',choices=['patchesstructlits','patchesstructbusi','patchesstructwmh','patchesstructbrats','busionbusi','litsonlits','bratsonwmh','wmhonwmh','wmhonbrats','bratsonbrats','busionsim','litsonsim','wmhonsim','bratsonsim','background2d','background3d','background3dliver','texshapesbrats','texshapeswmh','texshapeslits','texshapesbusi','randomshapesbrats','randomshapeswmh','randomshapeslits','randomshapesbusi','spheresbrats','sphereslits','sphereswmh','spheresbusi','cutpastebrats','cutpastewmh','cutpastelits','cutpastebusi','fpiwmh','fpibrats','fpibusi','fpilits','wmh','brats','busi','lits','stare'],help='Which data to run on?')
+    parser.add_argument("-data",default='brats',choices=['square_noise_brats','square_gaussian_brats',
+                                                         'square_noise_wmh','square_gaussian_wmh',
+                                                         'square_noise_lits','square_gaussian_lits',
+                                                         'square_noise_busi','square_gaussian_busi',
+                                                         'square_noise_idrid','square_gaussian_idrid',
+                                                         'spheresidrid','randomshapesidrid','texshapesidrid',
+                                                         'cutpasteretina','fpiretina',
+                                                         'idridonidrid','retina','patchesstructlits','patchesstructbusi','patchesstructwmh','patchesstructbrats','busionbusi','litsonlits','bratsonwmh','wmhonwmh','wmhonbrats','bratsonbrats','busionsim','litsonsim','wmhonsim','bratsonsim','background2d','background3d','background3dliver','texshapesbrats','texshapeswmh','texshapeslits','texshapesbusi','randomshapesbrats','randomshapeswmh','randomshapeslits','randomshapesbusi','spheresbrats','sphereslits','sphereswmh','spheresbusi','cutpastebrats','cutpastewmh','cutpastelits','cutpastebusi','fpiwmh','fpibrats','fpibusi','fpilits','wmh','brats','busi','lits','stare'],help='Which data to run on?')
     parser.add_argument("-workers",default=4,type=int)
     parser.add_argument("-batch",default=8,type=int)
     parser.add_argument("-date",default="{:%d_%m_%y}".format(datetime.now()))
@@ -327,6 +815,8 @@ if(__name__ =="__main__"):
     parser.add_argument("-unique_id",default='',help='Name to uniquely identify the experiment')
     parser.add_argument("-data_path",dest='system_data_path',default=112,type=int,choices=[112,131,63,64])
     parser.add_argument("-use_rician",default=False,action='store_true')
+    parser.add_argument('-exp_id',default='default')
+
     args = parser.parse_args()
 
     data_addresses = {131:'/mnt/a4ef64ea-1b6b-4423-b1d2-4794d2e97289',63:'/mnt/d1bdf387-8fd2-4f57-8c8a-eba9ef0baff6',64:'/mnt/70b9cd2d-ce8a-4b10-bb6d-96ae6a51130a',112:'/mnt/04d05e02-a59c-4a91-8c16-28a8c9f1c14f',}
@@ -338,3 +828,54 @@ if(__name__ =="__main__"):
 
     create(**vars(args))
 
+
+
+
+
+    """ ****** Include these above *******
+
+            if(self.which_data=='wmh'):
+            num_lesions = np.random.randint(1,30) #5,15
+            ranges = [(2,5),(3,5)]
+            centroid_scaling = 20
+        
+        elif(self.which_data=='size1'):
+            num_lesions = np.random.randint(1,30) #5,15
+            ranges = [(2,5),(2,5)]
+            centroid_scaling = 20
+
+        elif(self.which_data=='size2'):
+            num_lesions = np.random.randint(1,15) #5,15
+            ranges = [(3,5),(3,5)]
+            centroid_scaling = 20
+
+        elif(self.which_data=='size3'):
+            num_lesions = np.random.randint(1,10) #5,15
+            ranges = [(5,10),(5,10)]
+            centroid_scaling = 15
+
+        elif(self.which_data=='size4'):
+            num_lesions = np.random.randint(1,5) #5,15
+            ranges = [(10,15),(10,15)]
+            centroid_scaling = 15
+
+        elif(self.which_data=='all'):
+            num_lesions = np.random.randint(1,30) #5,15
+            ranges = [(2,5),(3,5),(5,10),(10,15)]
+            centroid_scaling = 20
+
+        elif(self.which_data=='busi'):
+            num_lesions = np.random.randint(1,3) #5,15
+            ranges = [(5,10),(10,15),(20,25),(100,105)]
+            centroid_scaling = 20
+
+        elif(self.which_data=='stare'):
+            num_lesions = np.random.randint(1,20) #5,15
+            ranges = [(2,5),(3,5),]
+            centroid_scaling = 20
+        
+        else:
+            num_lesions = np.random.randint(1,5)
+            ranges = [(5,10),(10,15)]
+            centroid_scaling = 15
+"""
