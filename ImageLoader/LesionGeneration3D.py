@@ -124,12 +124,14 @@ class LesionGeneration3D(Dataset):
         ellipsoid = ellipsoid<0 
         return ellipsoid
         
-    def create_pert(self, sigma=1.0,size=None, range_min=-0.3, range_max=1.0):
-        noise = np.random.random(size)
+    def create_pert(self,inter_image, sigma=1.0,size=None, range_min=-0.3, range_max=1.0):
+        noise = np.random.randn(*size)
         if(self.use_rician):
             img = np.ones(size)
             noise = rice.rvs(img,scale=1)
-        noise = gaussian_filter(noise,sigma) + 0.5*gaussian_filter(noise,sigma/2) + 0.25*gaussian_filter(noise,sigma/4)
+        noise -=noise.min()
+        noise /=noise.max()
+        noise = gaussian_filter(noise+inter_image,sigma) + 0.5*gaussian_filter(noise+inter_image,sigma/2) + 0.25*gaussian_filter(noise+inter_image,sigma/4)
         noise_min = noise.min()
         noise_max = noise.max()
 
@@ -197,18 +199,18 @@ class LesionGeneration3D(Dataset):
         
         return final_region,1
 
-    def blend_intensity(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image):
+    def blend_intensity(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image,output_image,output_mask):
         if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5) and self.which_data!='lits'):
-            tex_noise_edema = self.create_pert(tex_sigma_edema,image_mask.shape,range_min,range_max)
+            tex_noise_edema = self.create_pert(inter_image,tex_sigma_edema,image_mask.shape,range_min,range_max)
             if(not self.have_noise):
                 tex_noise_edema = 1.0
 
             smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
-            smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
+            smoothed_out = gaussian_filter(output_image,sigma=smoothing_image) 
             
             if(self.which_data == 'lits'):
                 smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
-                smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
+                smoothed_out = gaussian_filter(output_image,sigma=smoothing_image) 
 
 
             smoothed_out-=smoothed_out.min()
@@ -245,7 +247,6 @@ class LesionGeneration3D(Dataset):
                 image2 = alpha*smoothed_out + beta*smoothed_les
             image1[out>0]=image2[out>0]
             image1[image1<0] =np.random.uniform(0,0.1)
-            print(image1.min())
 
         image_stuff = image>0.01
         image1[image_stuff==0] = 0
@@ -283,18 +284,18 @@ class LesionGeneration3D(Dataset):
 
                 
             if(semi_axes_range==(2,5)):
-                alpha = np.random.uniform(0.7,0.8)
+                alpha = np.random.uniform(0.5,0.65)
                 beta = 1-alpha
             if(semi_axes_range!=(2,5)):
-                alpha = np.random.uniform(0.7,0.9)
+                alpha = np.random.uniform(0.5,0.65)
                 beta = 1-alpha
 
             if(self.which_data=='lits'):
-                alpha = np.random.uniform(0.75,0.9)
+                alpha = np.random.uniform(0.7,0.9)
                 beta = 1-alpha
 
             if(self.which_data=='wmh'):
-                alpha = np.random.uniform(0.7,0.8)
+                alpha = np.random.uniform(0.5,0.6)
                 beta = 1-alpha
 
             smoothing_mask = np.random.uniform(0.6,0.8)
@@ -309,6 +310,7 @@ class LesionGeneration3D(Dataset):
             perturb_sigma = np.random.uniform(0.5,5)
 
             #print(alpha,beta)
+            out_edema = np.zeros_like(image)
             if(semi_axes_range == (2,5)):
                 small_sigma = np.random.uniform(1,2)
                 out = self.gaussian_small_shapes(image_mask,small_sigma)
@@ -339,11 +341,11 @@ class LesionGeneration3D(Dataset):
             output_mask = np.logical_or(output_mask,out)
 
             if(self.have_noise and semi_axes_range !=(2,5)):
-                tex_noise = self.create_pert(tex_sigma,image_mask.shape,range_min,range_max)
+                tex_noise = self.create_pert(inter_image,tex_sigma,image_mask.shape,range_min,range_max)
             else:
                 tex_noise = 1.0
             
-            image1 = self.blend_intensity(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image)
+            image1 = self.blend_intensity(semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image,output_image,output_mask)
             output_image = image1
             output_image -= output_image.min()
             output_image /= output_image.max()
@@ -436,12 +438,12 @@ class LesionGeneration3D(Dataset):
             output_mask = np.logical_or(output_mask,out)
 
             if(self.have_noise and semi_axes_range !=(2,5)):
-                tex_noise = self.create_pert(tex_sigma,image_mask.shape,range_min,range_max)
+                tex_noise = self.create_pert(inter_image,tex_sigma,image_mask.shape,range_min,range_max)
             else:
                 tex_noise = 1.0
             
             if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
-                tex_noise_edema = self.create_pert(tex_sigma_edema,image_mask.shape,range_min,range_max)
+                tex_noise_edema = self.create_pert(inter_image,tex_sigma_edema,image_mask.shape,range_min,range_max)
 
                 smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
                 smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
