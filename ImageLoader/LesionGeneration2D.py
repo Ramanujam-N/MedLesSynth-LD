@@ -108,18 +108,17 @@ class LesionGeneration2D(Dataset):
 
         return ellipsoid
         
-    def gaussian_noise(self, sigma=1.0, size = (128,128), range_min=-0.3, range_max=1.0):
+    def create_pert(self, inter_image, sigma=1.0, size = (128,128), range_min=-0.3, range_max=1.0):
         noise = np.random.random(size)
         noise1 = PerlinNoise(octaves=50)
-        gaussian_noise = np.array([[noise1([i/size[0], j/size[1]]) for j in range(size[0])] for i in range(size[1])])
+        noise = np.array([[noise1([i/size[0], j/size[1]]) for j in range(size[0])] for i in range(size[1])])
 
-        # gaussian_noise = gaussian_filter(noise,sigma) + 0.5*gaussian_filter(noise,sigma/2) + 0.25*gaussian_filter(noise,sigma/4)
-        gaussian_noise_min = gaussian_noise.min()
-        gaussian_noise_max = gaussian_noise.max()
+        gaussian_noise = gaussian_filter(noise + inter_image,sigma) + 0.5*gaussian_filter(noise + inter_image,sigma/2) + 0.25*gaussian_filter(noise+ inter_image,sigma/4)
+        noise_min = noise.min()
+        noise_max = noise.max()
 
         # Normalizing  (a - amin)*(tmax-tmin)/(a_max - a_min) + tmin
-        tex_noise = ((gaussian_noise - gaussian_noise_min)*(range_max-range_min)/(gaussian_noise_max-gaussian_noise_min)) + range_min 
-        tex_noise = 5*np.ones_like(tex_noise)*tex_noise
+        tex_noise = ((noise - noise_min)*(range_max-range_min)/(noise_max-noise_min)) + range_min 
         return tex_noise
     
     def localise_pert(self,scale_centroids,centroid_main,num_ellipses,semi_axes_range,perturb_sigma=[1,1],image_mask=1):
@@ -181,11 +180,12 @@ class LesionGeneration2D(Dataset):
         # return final_region,1
         return out,1
 
+
     def blend_intensity(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image,output_image):
         if(self.have_smoothing and semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
 
             if(self.have_edema):
-                tex_noise_edema = self.create_pert(tex_sigma_edema,self.size,range_min,range_max)
+                tex_noise_edema = self.create_pert(inter_image,tex_sigma_edema,self.size,range_min,range_max)
 
                 smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
                 smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
@@ -201,8 +201,8 @@ class LesionGeneration2D(Dataset):
             smoothed_out/=smoothed_out.max()
 
             if(self.which_data=='busi'):
-                image1 = alpha*output_image*(1-out) - beta*smoothed_les
-                image2 = alpha*smoothed_out - beta*smoothed_les
+                image1 = alpha*output_image*(1-out) + beta*smoothed_les
+                image2 = alpha*smoothed_out*(1-out) + beta*smoothed_les
                 
                 
             else:
@@ -230,15 +230,9 @@ class LesionGeneration2D(Dataset):
                 smoothed_out = output_image
             
             if(self.which_data=='busi'):
-                image1 = alpha*output_image*(1-out) - beta*smoothed_les
-                image2 = alpha*smoothed_out - beta*smoothed_les
+                image1 = alpha*output_image*(1-out) + beta*smoothed_les
+                image2 = alpha*smoothed_out*(1-out) + beta*smoothed_les
 
-            elif(np.random.choice([0,1])*self.dark):
-                image1 = alpha*output_image - beta*smoothed_les
-                image2 = alpha*smoothed_out - beta*smoothed_les
-            else:
-                image1 = alpha*output_image + beta*smoothed_les
-                image2 = alpha*smoothed_out + beta*smoothed_les
             
             image1[out>0]=image2[out>0]
             image1[image1<0] = 0
@@ -282,12 +276,12 @@ class LesionGeneration2D(Dataset):
                 beta = 1-alpha
 
             if(self.which_data=='busi'):
-                alpha = np.random.uniform(0.5,0.8) # 0.4 0.5
+                alpha = np.random.uniform(0.7,0.9) # 0.4 0.5
                 beta = 1-alpha
 
             smoothing_mask = np.random.uniform(0.6,0.8)
             if(self.which_data=='busi'):
-                smoothing_mask = np.random.uniform(0.6,0.8)
+                smoothing_mask = np.random.uniform(0.2,0.4)
 
             smoothing_image = np.random.uniform(0.3,0.5)
 
@@ -323,11 +317,11 @@ class LesionGeneration2D(Dataset):
             output_mask = np.logical_or(output_mask,out)
 
             if(self.have_noise and semi_axes_range !=(2,5)):
-                tex_noise = self.create_pert(tex_sigma,self.size,range_min,range_max)
+                tex_noise = self.create_pert(inter_image,tex_sigma,self.size,range_min,range_max)
             else:
                 tex_noise = 1.0
             
-            image1 = self.blend_intensity(self,semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image,output_image)
+            image1 = self.blend_intensity(semi_axes_range,tex_sigma_edema,image_mask,range_min,range_max,alpha,beta,gamma,out_edema,out,tex_noise,smoothing_mask,inter_image,smoothing_image,image,output_image)
 
             output_image = image1
             output_image -= output_image.min()
@@ -553,27 +547,6 @@ class LesionGeneration2D_retina(Dataset):
         if(not self.perturb):
             return out,1
         
-        # Perturb in a local neighbhour hood of the lesion
-        # bounding_box = regions[0].bbox
-
-        # noise_b_box = np.random.normal(size = self.size)
-        # noise_b_box = gaussian_filter(noise_b_box,sigma=perturb_sigma) 
-        # noise_b_box -= noise_b_box.min()
-        # noise_b_box /= noise_b_box.max()
-
-        # thresholded_b_box = np.zeros_like(out)
-        # thresholded_b_box[bounding_box[0]:bounding_box[2],bounding_box[1]:bounding_box[3]] = (noise_b_box>0.6)[bounding_box[0]:bounding_box[2],bounding_box[1]:bounding_box[3]]
-
-        # labelled_threshold_b_box, nlabels = skimage.measure.label(thresholded_b_box, return_num=True)
-        # labels_in_big_lesion = np.union1d(out * labelled_threshold_b_box, [])
-        # labels_tob_removed = np.setdiff1d(np.arange(1, nlabels+1), labels_in_big_lesion)
-        # for i in labels_tob_removed:
-        #     labelled_threshold_b_box[labelled_threshold_b_box == i] = 0
-
-        # final_region = out + labelled_threshold_b_box >0
-        
-        
-        # return final_region,1
         return out,1
 
     def simulation(self,image,inter_image,image_mask,num_lesions=3,gt_mask=None):
@@ -626,9 +599,6 @@ class LesionGeneration2D_retina(Dataset):
                 alpha_b = np.random.uniform(0.4,0.5)
                 beta_b = 1-alpha_b
 
-            # if(self.which_data=='busi'):
-            #     alpha = np.random.uniform(0.5,0.8) # 0.4 0.5
-            #     beta = 1-alpha
 
             smoothing_mask = np.random.uniform(0.4,0.7)
             if(self.which_data=='busi'):
@@ -665,31 +635,16 @@ class LesionGeneration2D_retina(Dataset):
                     out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
 
 
-            tex_noise = self.gaussian_noise(tex_sigma,inter_image=image,size=self.size,range_min=range_min,range_max=range_max)
-            # if(self.have_noise and semi_axes_range !=(2,5)):
-            #     tex_noise = self.gaussian_noise(tex_sigma,self.size,range_min,range_max)
-            # else:
-            tex_noise = 1.0
-            
+            tex_noise = self.create_pert(tex_sigma,inter_image=inter_image,size=self.size,range_min=range_min,range_max=range_max)
+
             if(self.have_smoothing and semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
 
-                # if(self.have_edema):
-                #     tex_noise_edema = self.gaussian_noise(tex_sigma_edema,self.size,range_min,range_max)
-
-                #     smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
-                #     smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-                # else:
-                    # smoothed_les = gaussian_filter(out*(tex_noise+output_image), sigma=smoothing_mask)
-                smoothed_les_r = smoothed_les_g = smoothed_les_b = gaussian_filter(out+0.1*output_image_g,sigma = smoothing_mask)
-                smoothed_les_r_2 = smoothed_les_g_2 = smoothed_les_b_2 = gaussian_filter(out+0.1*output_image_g,sigma = smoothing_image)
+                smoothed_les_r = smoothed_les_g = smoothed_les_b = gaussian_filter(out+0.1*output_image_g +tex_noise,sigma = smoothing_mask)
+                smoothed_les_r_2 = smoothed_les_g_2 = smoothed_les_b_2 = gaussian_filter(out+0.1*output_image_g +tex_noise,sigma = smoothing_image)
                 
                 smoothed_out_mask = gaussian_filter(out,sigma = smoothing_mask)
 
                 output_mask = np.logical_or(output_mask,out>0)
-
-                # smoothed_les_r = out#*(tex_noise*image_r)
-                # smoothed_les_g = out#*(tex_noise*image_g)
-                # smoothed_les_b = out#*(tex_noise*image_b)
 
 
                 smoothed_out_r = gaussian_filter(output_image_r,sigma=smoothing_image)
@@ -730,15 +685,7 @@ class LesionGeneration2D_retina(Dataset):
                     image1_g[smoothed_out_mask>0]=image2_g[smoothed_out_mask>0]
                     image1_b[smoothed_out_mask>0]=image2_b[smoothed_out_mask>0]
                 
-                # image1_r[image1_r<0] = 0
-                # image1_g[image1_g<0] = 0
-                # image1_b[image1_b<0] = 0
-                # image1[out>0] = ndimage.grey_erosion(image1*(out>0),structure = np.ones((1,5)))[out>0]
-                # dilated_out = ndimage.binary_dilation(out>0,structure=np.ones((4,4)))
-                # image1_r[smoothed_les_r>0] = image1_r[smoothed_les_r>0]
-                # image1_g[smoothed_les_g>0] = image1_g[smoothed_les_g>0]
-                # image1_b[smoothed_les_b>0] = image1_b[smoothed_les_b>0]
-                
+
             
             if(self.have_smoothing and semi_axes_range==(2,5) or semi_axes_range==(3,5)):
                 # smoothed_les = gaussian_filter(out*(tex_noise+output_image), sigma=smoothing_mask)
@@ -749,9 +696,6 @@ class LesionGeneration2D_retina(Dataset):
 
                 output_mask = np.logical_or(output_mask,out>0)
 
-                # smoothed_les_g = out#*(tex_noise*image_g)
-                # smoothed_les_b = out#*(tex_noise*image_b)
-
 
                 smoothed_out_r = gaussian_filter(output_image_r,sigma=smoothing_image)
                 smoothed_out_r-=smoothed_out_r.min()
@@ -768,39 +712,22 @@ class LesionGeneration2D_retina(Dataset):
                 if(self.which_data=='retina'):
                     # print('retina')
                     alpha = np.random.uniform(0.8,0.9)
-                    if(self.abl_type=='randomshapesidrid'):
-                        alpha =0.5
-                        smoothed_les_r = smoothed_les_r_2 = out
-                        smoothed_les_g = smoothed_les_g_2 = out
-                        smoothed_les_b = smoothed_les_b_2 = out
-                    elif(self.abl_type =='texshapesidrid'):
-                        alpha =0.1
-                        print('tex')
 
-                    image1_r = output_image_r*(1-out) + alpha*smoothed_les_r
-                    image2_r = smoothed_out_r*(1-smoothed_out_mask) + alpha*smoothed_les_r_2
 
-                    image1_g = output_image_g*(1-out) + alpha*smoothed_les_g
-                    image2_g = smoothed_out_g*(1-smoothed_out_mask) + alpha*smoothed_les_g_2
+                    image1_r = (1-alpha)*output_image_r*(1-out) + alpha*smoothed_les_r
+                    image2_r = (1-alpha)*smoothed_out_r*(1-smoothed_out_mask) + alpha*smoothed_les_r_2
 
-                    image1_b = output_image_b*(1-out) + alpha*smoothed_les_b
-                    image2_b = smoothed_out_b*(1-smoothed_out_mask) + alpha*smoothed_les_b_2
+                    image1_g = (1-alpha)*output_image_g*(1-out) + alpha*smoothed_les_g
+                    image2_g = (1-alpha)*smoothed_out_g*(1-smoothed_out_mask) + alpha*smoothed_les_g_2
+
+                    image1_b = (1-alpha)*output_image_b*(1-out) + alpha*smoothed_les_b
+                    image2_b = (1-alpha)*smoothed_out_b*(1-smoothed_out_mask) + alpha*smoothed_les_b_2
 
                     image1_r[smoothed_out_mask>0]=image2_r[smoothed_out_mask>0]
                     image1_g[smoothed_out_mask>0]=image2_g[smoothed_out_mask>0]
                     image1_b[smoothed_out_mask>0]=image2_b[smoothed_out_mask>0]
 
                 
-                # image1_r[image1_r<0] = 0
-                # image1_g[image1_g<0] = 0
-                # image1_b[image1_b<0] = 0
-
-                # image1[out>0] = ndimage.grey_erosion(image1*(out>0),structure = np.ones((1,5)))[out>0]
-                # dilated_out = ndimage.binary_dilation(out>0,structure=np.ones((10,10)))
-                # image1_r[smoothed_les_r>0] = image1_r[smoothed_les_r>0]
-                # image1_g[smoothed_les_g>0] = image1_g[smoothed_les_g>0]
-                # image1_b[smoothed_les_b>0] = image1_b[smoothed_les_b>0]
-
             output_image_r = image1_r
             output_image_r -= output_image_r.min()
             output_image_r /= output_image_r.max() +1e-6
@@ -839,8 +766,6 @@ class LesionGeneration2D_retina(Dataset):
         #output_mask = skimage.morphology.binary_dilation(output_mask,skimage.morphology.square(2))
         
         output_image = np.stack([0.4*output_image_r+image_r,0.6*output_image_g+image_g,0.0*output_image_b+image_b],axis=-1) #0.5 0.8 0
-        if(self.abl_type=='texshapesidrid'):
-            output_image = np.stack([0.2*output_image_r+image_r,0.3*output_image_g+image_g,0.0*output_image_b+image_b],axis=-1) #0.5 0.8 0
 
         output_image -=output_image.min()
         output_image /= output_image.max()
@@ -877,8 +802,8 @@ class LesionGeneration2D_retina(Dataset):
         image,gt_mask,optic = self.read_image(index)
 
         #If texture exists have a interpolation image.
-        # interpolation_choice = np.random.choice(len(self.paths))
-        # inter_image,_,_ = self.read_image(interpolation_choice)
+        interpolation_choice = np.random.choice(len(self.paths))
+        inter_image,_,_ = self.read_image(interpolation_choice)
 
         if(self.which_data == 'retina'):
 
@@ -892,10 +817,10 @@ class LesionGeneration2D_retina(Dataset):
         param_dict = {}
 
         if(self.return_param):
-            image, label, param_dict = self.simulation(image,None, _mask_img,self.num_lesions,gt_mask=gt_mask)
+            image, label, param_dict = self.simulation(image,inter_image, _mask_img,self.num_lesions,gt_mask=gt_mask)
 
         else:
-            image, label = self.simulation(image,None, _mask_img,self.num_lesions,gt_mask=gt_mask)
+            image, label = self.simulation(image,inter_image, _mask_img,self.num_lesions,gt_mask=gt_mask)
 
         return image.astype(np.single),label.astype(np.single),self.paths[index],param_dict
 

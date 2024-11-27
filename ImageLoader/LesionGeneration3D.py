@@ -216,12 +216,12 @@ class LesionGeneration3D(Dataset):
 
             if(self.which_data=='lits'):
                 
-                image1 = alpha*output_image - beta*smoothed_les
-                image2 = alpha*smoothed_out - beta*smoothed_les
+                image1 = alpha*output_image*(1-out) + beta*smoothed_les
+                image2 = alpha*smoothed_out*(1-out) + beta*smoothed_les
 
             else:
-                image1 = alpha*output_image + smoothed_les
-                image2 = alpha*smoothed_out + smoothed_les
+                image1 = alpha*output_image*(1-out) + smoothed_les
+                image2 = alpha*smoothed_out*(1-out) + smoothed_les
 
             image1[out_edema>0]=image2[out_edema>0]
             image1[image1<0] = 0
@@ -237,18 +237,9 @@ class LesionGeneration3D(Dataset):
             smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
 
             if(self.which_data=='lits'):
-                # lesion_mean = (output_image*gt_mask).mean()
-                # lesion_stdev = (output_image*gt_mask).std()
-                # lesion_min = lesion_mean - 1*lesion_stdev
-                # lesion_max = lesion_mean + 1*lesion_stdev
-                # print(lesion_mean,lesion_stdev,lesion_min,lesion_max)
-                # smoothed_les = self.normalize(smoothed_les,lesion_min,lesion_max)
-                image1 = alpha*output_image - beta*smoothed_les
-                image2 = alpha*smoothed_out - beta*smoothed_les
+                image1 = alpha*output_image*(1-out) + beta*smoothed_les
+                image2 = alpha*smoothed_out*(1-out) + beta*smoothed_les
             
-            elif(np.random.choice([0,1])*self.dark):
-                image1 = alpha*output_image - beta*smoothed_les
-                image2 = alpha*smoothed_out - beta*smoothed_les
             else:
                 image1 = alpha*output_image + beta*smoothed_les
                 image2 = alpha*smoothed_out + beta*smoothed_les
@@ -256,9 +247,6 @@ class LesionGeneration3D(Dataset):
             image1[image1<0] =np.random.uniform(0,0.1)
             print(image1.min())
 
-        # else:
-        #     image1 = alpha*output_image*(1-out) + beta*out*tex_noise
-        #     image1[image1<0] = 0
         image_stuff = image>0.01
         image1[image_stuff==0] = 0
         return image1
@@ -288,16 +276,6 @@ class LesionGeneration3D(Dataset):
             random_coord_index = np.random.choice(len(x_corr),1)
             centroid_main = np.array([y_corr[random_coord_index],x_corr[random_coord_index],z_corr[random_coord_index]])
 
-            # print(centroid_main)
-            # to_save_img_centroid = np.zeros_like(image_mask)
-            # to_save_img_centroid[centroid_main[0].item()-10:centroid_main[0].item()+10,centroid_main[1].item()-10:centroid_main[1].item()+10,centroid_main[2].item()-10:centroid_main[2].item()+10] =100
-            # to_save_img = nib.Nifti1Image(roi.astype(np.single)+2*image_mask.astype(np.single)+to_save_img_centroid.astype(np.single),affine=np.eye(4))
-            # nib.save(to_save_img,'./sample.nii.gz')
-            # exit(0)
-            #x_corr,y_corr ------.
-        
-            # print(centroid_main,roi_with_masks[centroid_main[0],centroid_main[1],centroid_main[2]])
-            # We need a loop and random choices tailored here for multiple lesions 
 
             scale_centroid = np.random.uniform(2,self.centroid_scaling)
             num_ellipses = np.random.randint(5,self.num_ellipses)
@@ -380,171 +358,11 @@ class LesionGeneration3D(Dataset):
                 param_dict[str(i)+'_'+total_param_list[j]] = total_params[j]
         
         param_dict['num_lesions'] = num_lesions
-        #output_mask = skimage.morphology.binary_dilation(output_mask,skimage.morphology.cube(2))
-
-        # image_hf = image - gaussian_filter(image,sigma=5)*(image_mask)
-        # output_image+=image_hf*(image_mask)
-        # output_image -= output_image.min()
-        # output_image /= output_image.max()
-        # output_image[image_mask==0] = 0
 
         if(self.return_param):
             return output_image, output_mask, param_dict
         else:
             return output_image, output_mask
-
-    # def simulation_onmask(self,image,inter_image,image_mask,num_lesions=3,gt_mask=None,roi_mask=None):
-    #     param_dict = {}
-        
-    #     # roi = skimage.morphology.binary_erosion(image_mask,skimage.morphology.ball(10))*(image>0.1) #15
-    #     # roi = ndimage.binary_erosion(image_mask,skimage.morphology.ball(10))*(image>0.1) #15
-    #     # roi_with_masks = roi*(1-gt_mask)
-    #     output_image = image*(1-gt_mask) + gt_mask*np.mean(image*(gt_mask)*(image>0.15))
-    #     output_mask = gt_mask
-        
-    #     total_param_list = ['scale_centroid','num_ellipses','semi_axes_range','alpha','beta','gamma','smoothing_mask',
-    #                         'tex_sigma','range_min','range_max','tex_sigma_edema','pertub_sigma']
-        
-    #     labels = skimage.measure.label(gt_mask)
-    #     regions = skimage.measure.regionprops(labels)
-
-    #     num_lesions = len(regions)
-        
-    #     for i in range(num_lesions):
-    #         gamma = 0
-    #         tex_sigma_edema = 0
-    #         # centroid_main = np.array(regions[i].centroid)
-    #         centroid_main = np.array([regions[i].centroid[1],regions[i].centroid[0],regions[i].centroid[2]]).T            # print(centroid_main,roi_with_masks[centroid_main[0],centroid_main[1],centroid_main[2]])
-    #         # We need a loop and random choices tailored here for multiple lesions 
-
-    #         scale_centroid = np.random.randint(2,self.centroid_scaling)
-    #         num_ellipses = np.random.randint(5,self.num_ellipses)
-    #         semi_axes_range = self.ranges[int(np.random.choice(len(self.ranges),p=self.range_sampling))]
-
-                
-    #         if(semi_axes_range==(2,5)):
-    #             alpha = np.random.uniform(0.5,0.8)
-    #             beta = 1-alpha
-    #         if(semi_axes_range!=(2,5)):
-    #             alpha = np.random.uniform(0.6,0.8)
-    #             beta = 1-alpha
-
-    #         if(self.which_data=='lits'):
-    #             alpha = np.random.uniform(0.6,0.8)
-    #             beta = 1-alpha
-
-    #         smoothing_mask = np.random.uniform(0.6,0.8)
-    #         smoothing_image = np.random.uniform(0.05,0.1) # (0.3,0.5)
-
-    #         tex_sigma = np.random.uniform(0.4,0.7)
-    #         range_min = np.random.uniform(-0.5,0.5)
-    #         range_max = np.random.uniform(0.7,1)
-    #         perturb_sigma = np.random.uniform(0.5,5)
-
-    #         #print(alpha,beta)
-    #         if(semi_axes_range == (2,5)):
-    #             small_sigma = np.random.uniform(1,2)
-    #             out = self.gaussian_small_shapes(image_mask,small_sigma)
-    #         else:   
-    #             out,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask) 
-    #             while(shape_status==-1):
-    #                 print(shape_status)
-    #                 centroid_main = np.array([regions[i].centroid[1],regions[i].centroid[0],regions[i].centroid[2]]).T            # print(centroid_main,roi_with_masks[centroid_main[0],centroid_main[1],centroid_main[2]])
-    #                 out,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=image_mask)
-                
-
-    #         if(semi_axes_range !=(2,5) and semi_axes_range !=(3,5) and self.which_data!='lits'):
-    #             semi_axes_range_edema = (semi_axes_range[0]+5,semi_axes_range[1]+5)
-    #             tex_sigma_edema = np.random.uniform(1,1.5)
-    #             beta = 1-alpha
-
-    #             gamma = np.random.uniform(0.5,0.7)
-    #             #print(alpha,beta,gamma)
-    #             out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
-    #             while(shape_status==-1):
-    #                 print(shape_status)
-    #                 centroid_main = np.array([regions[i].centroid[1],regions[i].centroid[0],regions[i].centroid[2]]).T            # print(centroid_main,roi_with_masks[centroid_main[0],centroid_main[1],centroid_main[2]])
-    #                 out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=image_mask)
-
-    #         output_mask = np.logical_or(output_mask,out)
-
-    #         if(self.have_noise and semi_axes_range !=(2,5)):
-    #             tex_noise = self.create_pert(tex_sigma,self.size,range_min,range_max)
-    #         else:
-    #             tex_noise = 1.0
-            
-    #         if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5) and self.which_data!='lits'):
-    #             tex_noise_edema = self.create_pert(tex_sigma_edema,self.size,range_min,range_max)
-    #             if(not self.have_noise):
-    #                 tex_noise_edema = 1.0
-
-    #             smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
-    #             smoothed_out = 0.5*output_image + 0.5*inter_image
-                
-    #             if(self.which_data == 'lits'):
-    #                 smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
-    #                 smoothed_out = 0.5*output_image + 0.5*inter_image
-
-    #             smoothed_out-=smoothed_out.min()
-    #             smoothed_out/=smoothed_out.max()
-
-    #             if(self.which_data=='lits'):
-    #                 image1 = alpha*output_image - beta*smoothed_les
-    #                 image2 = alpha*smoothed_out - beta*smoothed_les
-
-    #             else:
-    #                 image1 = alpha*output_image*(1-(labels==i+1)) + smoothed_les
-    #                 image2 = alpha*smoothed_out*(1-(labels==i+1)) + smoothed_les
-
-    #             image1[out_edema>0]=image2[out_edema>0]
-    #             image1[image1<0] = 0
-
-    #             output_mask = np.logical_or(output_mask,out_edema)
-    #             output_image = image1
-    #             output_image -= output_image.min()
-    #             output_image /= output_image.max()
-    #         if(self.have_smoothing and (semi_axes_range==(2,5) or semi_axes_range==(3,5)) or self.which_data=='lits'):
-    #             smoothed_les = gaussian_filter(out*tex_noise, sigma=smoothing_mask)
-    #             smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-
-    #             if(self.which_data=='lits'):
-    #                 image1 = alpha*output_image - beta*smoothed_les
-    #                 image2 = alpha*smoothed_out - beta*smoothed_les
-
-    #             elif(np.random.choice([0,1])*self.dark):
-    #                 image1 = alpha*output_image - beta*smoothed_les
-    #                 image2 = alpha*smoothed_out - beta*smoothed_les
-    #             else:
-    #                 image1 = alpha*output_image + beta*smoothed_les
-    #                 image2 = alpha*smoothed_out + beta*smoothed_les
-    #             image1[out>0]=image2[out>0]
-    #             image1[image1<0] =0.1
-                
-    #         # else:
-    #         #     image1 = alpha*output_image*(1-out) + beta*out*tex_noise
-    #         #     image1[image1<0] = 0
-            
-
-    #         output_image = image1
-    #         output_image -= output_image.min()
-    #         output_image /= output_image.max()
-
-
-    #         # roi_with_masks *= (1-output_mask)>0
-            
-    #         total_params = [scale_centroid,num_ellipses,semi_axes_range,alpha,beta,gamma,smoothing_mask,
-    #                         tex_sigma,range_min,range_max,tex_sigma_edema,perturb_sigma]
-            
-    #         for j in range(len(total_params)):
-    #             param_dict[str(i)+'_'+total_param_list[j]] = total_params[j]
-        
-    #     param_dict['num_lesions'] = num_lesions
-    #     #output_mask = skimage.morphology.binary_dilation(output_mask,skimage.morphology.cube(2))
-
-    #     if(self.return_param):
-    #         return output_image, output_mask, param_dict
-    #     else:
-    #         return output_image, output_mask
 
     def simulation_onmask(self,image,inter_image,image_mask,num_lesions=3,gt_mask=None,roi_mask=None):
         param_dict = {}
@@ -784,186 +602,3 @@ class LesionGeneration3D(Dataset):
 
 
 
-
-#########################################################
-# New Setting 
-    # def simulation_with_maskingregion_centroid(self,image,inter_image,brain_mask_img,output_total_mask,num_lesions=3):
-    #     param_dict = {}
-
-    #     if(self.which_data=='wmh'):
-    #         num_lesions = np.random.randint(1,30) #5,15
-    #         ranges = [(2,5),(3,5)]
-    #         centroid_scaling = 20
-    #     elif(self.which_data=='brats'):
-    #         num_lesions = np.random.randint(1,5)
-    #         #ranges = [(5,10),(10,15)]
-    #         ranges = [(15,20),(15,20)]
-    #         centroid_scaling = 15
-    #     elif(self.which_data=='size1'):
-    #         num_lesions = np.random.randint(1,30) #5,15
-    #         ranges = [(2,5),(2,5)]
-    #         centroid_scaling = 20
-
-    #     elif(self.which_data=='size2'):
-    #         num_lesions = np.random.randint(1,15) #5,15
-    #         ranges = [(3,5),(3,5)]
-    #         centroid_scaling = 20
-
-    #     elif(self.which_data=='size3'):
-    #         num_lesions = np.random.randint(1,10) #5,15
-    #         ranges = [(5,10),(5,10)]
-    #         centroid_scaling = 15
-
-    #     elif(self.which_data=='size4'):
-    #         num_lesions = np.random.randint(1,5) #5,15
-    #         ranges = [(10,15),(10,15)]
-    #         centroid_scaling = 15
-
-    #     elif(self.which_data=='all'):
-    #         num_lesions = np.random.randint(1,30) #5,15
-    #         ranges = [(2,5),(3,5),(5,10),(10,15)]
-    #         centroid_scaling = 20
-    #     else:
-    #         num_lesions = np.random.randint(1,5)
-    #         ranges = [(5,10),(10,15)]
-    #         centroid_scaling = 15
-        
-        
-    #     output_total_mask*=brain_mask_img
-    #     output_total_mask = output_total_mask>0
-    #     mask_label,num_lesions = skimage.measure.label(output_total_mask>0,return_num=True)
-    #     regions = list(skimage.measure.regionprops(mask_label))
-
-    #     roi = skimage.morphology.binary_erosion(brain_mask_img,skimage.morphology.ball(15))*(image>0.1)
-    #     roi_with_masks = roi
-    #     output_image = image 
-    #     output_mask = np.zeros_like(brain_mask_img)
-        
-    #     total_param_list = ['scale_centroid','num_ellipses','semi_axes_range','alpha','beta','gamma','smoothing_mask',
-    #                         'tex_sigma','range_min','range_max','tex_sigma_edema','pertub_sigma']
-
-    #     for i in range(0,num_lesions):
-    #         # print(num_lesions)
-    #         gamma = 0
-    #         tex_sigma_edema = 0
-
-    #         centroid_main = np.array([regions[i].centroid[1],regions[i].centroid[0],regions[i].centroid[2]]).T
-            
-    #         # print(centroid_main,roi_with_masks[centroid_main[0],centroid_main[1],centroid_main[2]])
-    #         # We need a loop and random choices tailored here for multiple lesions 
-
-    #         scale_centroid = np.random.randint(2,centroid_scaling)
-    #         num_ellipses = 15
-    #         if(self.which_data=='all'):
-    #             semi_axes_range = ranges[int(np.random.choice(4,p=[0.35,0.4,0.15,0.1]))]
-    #         else:
-    #             semi_axes_range = ranges[int(np.random.choice(2,p=[0.7,0.3]))]
-                
-            
-    #         if(semi_axes_range==(2,5)):
-    #             alpha = np.random.uniform(0.5,0.8)
-    #             beta = 1-alpha
-    #         if(semi_axes_range!=(2,5)):
-    #             alpha = np.random.uniform(0.6,0.8)
-    #             beta = 1-alpha
-
-
-    #         smoothing_mask = np.random.uniform(0.6,0.8)
-    #         smoothing_image = np.random.uniform(0.3,0.5)
-
-    #         tex_sigma = np.random.uniform(0.4,0.7)
-    #         range_min = np.random.uniform(-0.5,0.5)
-    #         range_max = np.random.uniform(0.7,1)
-    #         perturb_sigma = np.random.uniform(0.5,5)
-
-    #         #print(alpha,beta)
-    #         if(semi_axes_range == (2,5)):
-    #             small_sigma = np.random.uniform(1,2)
-    #             out = self.gaussian_small_shapes(brain_mask_img,small_sigma)
-    #         else:   
-    #             out,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range,perturb_sigma,image_mask=brain_mask_img) 
-
-    #         if(self.on_real_with_mask):
-    #             out*=output_total_mask
-    #             #pass
-    #         # sumout = np.sum(np.sum(out, axis=0), axis=0)
-    #         # slide_no = np.where(sumout == np.amax(sumout))[0][0]
-    #         # plt.imshow(out[:,:,slide_no])
-    #         # plt.show()
-    #         if(semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
-    #             semi_axes_range_edema = (semi_axes_range[0]+5,semi_axes_range[1]+5)
-    #             tex_sigma_edema = np.random.uniform(1,1.5)
-    #             beta = 1-alpha
-
-    #             gamma = np.random.uniform(0.5,0.7)
-    #             #print(alpha,beta,gamma)
-    #             out_edema,shape_status = self.localise_pert(scale_centroid, centroid_main,num_ellipses,semi_axes_range_edema,perturb_sigma,image_mask=brain_mask_img)
-    #             if(self.on_real_with_mask):
-    #                 out_edema*=output_total_mask
-    #                 #pass
-
-    #         output_mask = np.logical_or(output_mask,out)
-
-    #         if(self.have_noise and semi_axes_range !=(2,5)):
-    #             tex_noise = self.create_pert(tex_sigma,self.size,range_min,range_max)
-    #         else:
-    #             tex_noise = 1.0
-            
-    #         if(self.have_smoothing and self.have_edema and semi_axes_range !=(2,5) and semi_axes_range !=(3,5)):
-    #             tex_noise_edema = self.create_pert(tex_sigma_edema,self.size,range_min,range_max)
-
-    #             smoothed_les = beta*gaussian_filter(out_edema*(gamma*(1-out)*tex_noise_edema + 4*gamma*out*tex_noise), sigma=smoothing_mask)
-    #             smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-                
-    #             smoothed_out-=smoothed_out.min()
-    #             smoothed_out/=smoothed_out.max()
-
-
-    #             image1 = alpha*output_image + smoothed_les
-    #             image2 = alpha*smoothed_out + smoothed_les
-
-    #             image1[out_edema>0]=image2[out_edema>0]
-    #             image1[image1<0] = 0
-
-    #             output_mask = np.logical_or(output_mask,out_edema)
-    #             output_image = image1
-    #             output_image -= output_image.min()
-    #             output_image /= output_image.max()
-    #         if(self.have_smoothing and semi_axes_range==(2,5) or semi_axes_range==(3,5)):
-    #             smoothed_les = gaussian_filter(out*tex_noise, sigma=smoothing_mask)
-    #             smoothed_out = gaussian_filter(0.5*output_image + 0.5*inter_image, sigma=smoothing_image)
-                
-
-    #             if(np.random.choice([0,1])*self.dark):
-    #                 image1 = alpha*output_image - beta*smoothed_les
-    #                 image2 = alpha*smoothed_out - beta*smoothed_les
-    #             else:
-    #                 image1 = alpha*output_image + beta*smoothed_les
-    #                 image2 = alpha*smoothed_out + beta*smoothed_les
-    #             image1[out>0]=image2[out>0]
-    #             image1[image1<0] = 0.1
-    #         # else:
-    #         #     image1 = alpha*output_image*(1-out) + beta*out*tex_noise
-    #         #     image1[image1<0] = 0
-            
-
-    #         output_image = image1
-    #         output_image -= output_image.min()
-    #         output_image /= output_image.max()
-
-    #         # if(int(np.random.choice([0,1]))):
-    #         #     output_image[out>0] = 1-output_image[out>0]
-    #         roi_with_masks *= (1-output_mask)>0
-            
-    #         total_params = [scale_centroid,num_ellipses,semi_axes_range,alpha,beta,gamma,smoothing_mask,
-    #                         tex_sigma,range_min,range_max,tex_sigma_edema,perturb_sigma]
-            
-    #         for j in range(len(total_params)):
-    #             param_dict[str(i)+'_'+total_param_list[j]] = total_params[j]
-
-    #     param_dict['num_lesions'] = num_lesions
-    #     output_mask = skimage.morphology.binary_dilation(output_mask,skimage.morphology.cube(2))
-    #     if(self.return_param):
-    #         return output_image, output_mask, param_dict
-    #     else:
-    #         return output_image, output_mask
